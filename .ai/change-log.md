@@ -151,3 +151,21 @@
 - Premier commit (`b424864`) : contenu existant avant l'initialisation du dépôt (backend M1-M10+B0-B3, frontend F1-F7, `.ai/`, `docs/`, `netlify.toml`). Vérifié avant commit qu'aucun secret ni donnée locale n'était inclus (`.env`, `backend/data/`, `node_modules/`, `graphify-out/` absents du diff stagé).
 - Suite de tests rejouée après coup (changements non applicatifs uniquement) : 136 tests backend + 33 tests frontend toujours verts.
 - Reste à faire côté utilisateur pour achever D4 : créer le dépôt distant (GitHub ou autre) et le pousser, puis connecter Netlify dessus (« Import from Git »).
+
+## 2026-11-07 — D4 : push initial vers GitHub (`docs/plan-deploiement.md`)
+- Premier push refusé (403) : les identifiants Git en cache (compte `tezcatlypoca`, clé SSH par défaut `~/.ssh/id_ed25519`) n'ont pas les droits sur `Vaubon-ent/LaTradition`. Diagnostic via `~/.ssh/config` : deux alias existants (`github-perso` → `id_ed25519`, `github-pro` → `id_ed25519_pro`, tagué `vaubon.pro@gmail.com`).
+- Remote `origin` reconfiguré en SSH via l'alias dédié : `git@github-pro:Vaubon-ent/LaTradition.git` (au lieu de l'URL HTTPS d'origine). `ssh -T git@github-pro` confirme l'authentification sous `Vaubon-ent`.
+- Push réussi : branche `main` créée sur le dépôt distant avec le commit initial (`ccebbb6`, local branche renommée `master` → `main` avant le push pour suivre la convention GitHub).
+- Reste à faire côté utilisateur pour terminer D4 : connecter ce dépôt à un site Netlify (« Import from Git »).
+
+## 2026-11-07 — D1-D3 : backend déployé en conditions réelles sur BigBertha
+- Contexte : plusieurs blocages en route, tous résolus en session interactive (voir détail ci-dessous) — aucun bug de code, uniquement de la configuration d'infrastructure sur la machine de production (BigBertha).
+- **Incident évité de justesse** : `sudo tailscale down` exécuté par erreur sur la machine de production alors que Tailscale était le seul accès distant prévu — a coupé la connexion. Récupéré car la machine était aussi joignable en local/physiquement (pas de perte de service, les process tournant dessus, dont des agents Hermes, n'ont jamais été affectés : `tailscale down` ne coupe que le tunnel réseau, jamais les process). Leçon retenue : ne jamais suggérer de commande qui coupe une connexion réseau sans vérifier d'abord si c'est le seul accès disponible.
+- **Tailscale Funnel** : nécessitait une activation préalable au niveau du tailnet (HTTPS Certificates + Funnel feature, console admin Tailscale), en plus de l'autorisation par-node — non documenté dans le plan initial, découvert en le vivant. URL obtenue : `https://bigbertha.tail6f4387.ts.net/`.
+- **Conflit de port** : le port 3000 (par défaut) était déjà occupé par un process Hermes (`/home/bigbertha/.hermes/...`, PID 2798) tournant sur la machine — jamais touché. Backend reconfiguré sur le port **3001** (`.env`, `PORT=3001`), Funnel reconfiguré dessus.
+- **`npm install` incomplet** à plusieurs reprises (`Cannot find module 'dotenv'` malgré des tentatives répétées) — résolu par un `rm -rf node_modules package-lock.json && npm install` propre.
+- **Service systemd en échec** (`result: resources`) : la ligne `EnvironmentFile=` du gabarit `backend/deploy/boudins-backend.service` n'avait pas été adaptée au chemin réel de BigBertha (`/home/samuel/...` au lieu de `/home/bigbertha/Documents/LaTradition/backend/.env`) — `User=` et `WorkingDirectory=` avaient été corrigés mais pas cette ligne. Corrigé, service maintenant `active (running)`, démarrage automatique activé (`systemctl enable`).
+- **Vérification finale** : `curl https://bigbertha.tail6f4387.ts.net/api/health` depuis une machine extérieure (le PC de dev Windows, hors réseau de BigBertha) → `200 OK`, `{"status":"ok"}`, en-têtes `helmet` (CSP) présents, confirmant que c'est bien le backend LaTradition qui répond via le Funnel.
+- `netlify.toml` mis à jour avec l'URL Tailscale réelle (remplace le placeholder `<machine>.ts.net`).
+- Restant pour considérer D1-D3 totalement clos : confirmer que `boudins-backup.timer` est bien actif (commandes données, résultat pas encore confirmé par l'utilisateur).
+- Restant pour D4/D5 : URL Netlify définitive (pour `ALLOWED_ORIGIN` dans `.env` sur BigBertha), puis vérification CORS et parcours client complet en conditions réelles.
