@@ -169,3 +169,8 @@
 - `netlify.toml` mis à jour avec l'URL Tailscale réelle (remplace le placeholder `<machine>.ts.net`).
 - Restant pour considérer D1-D3 totalement clos : confirmer que `boudins-backup.timer` est bien actif (commandes données, résultat pas encore confirmé par l'utilisateur).
 - Restant pour D4/D5 : URL Netlify définitive (pour `ALLOWED_ORIGIN` dans `.env` sur BigBertha), puis vérification CORS et parcours client complet en conditions réelles.
+
+## 2026-11-07 — Fin de session : 502 Netlify détecté, correction poussée
+- L'utilisateur a testé le front déployé sur Netlify : toutes les requêtes `/api/*` échouaient en `502`. Cause confirmée : le `netlify.toml` déployé sur Netlify était encore celui avec le placeholder `<machine>.ts.net` (jamais poussé avant ce test, malgré la correction faite localement plus tôt dans la session).
+- Corrigé et poussé (commit `6042a44`) : `netlify.toml` pointe maintenant vers `https://bigbertha.tail6f4387.ts.net/api/:splat`. Netlify redéploie automatiquement (déploiement continu, D4).
+- Non vérifié avant la fin de la session : que le redéploiement Netlify a bien eu lieu et que le 502 a disparu, et que `ALLOWED_ORIGIN` (toujours vide sur BigBertha) a été réglé avec l'URL Netlify réelle — l'utilisateur ne l'a pas communiquée. Tant que ce n'est pas fait, même sans 502, le backend renverra 403 (CORS) à toutes les requêtes du front.

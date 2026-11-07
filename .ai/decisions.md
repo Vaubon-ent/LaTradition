@@ -40,3 +40,5 @@
 - Date de conception / retrait de la saison en cours. Source : CDC section 4 et 12.2.
 - Durée de conservation des données clients entre deux saisons (ou condition de suppression/anonymisation). Source : CDC section 7.3 et 12.4.
 - Contenu et structure exacte du champ « news » admin (page Bienvenue du front) : texte libre simple, ou champs structurés distincts (ex. alerte prix / alerte date limite) ? À définir selon l'usage réel une fois le dashboard admin en service.
+- Valeurs réelles de `pickup_address` et `contact_phone` (ajoutés le 2026-11-07, affichés sur la page de confirmation du front uniquement s'ils sont renseignés) : actuellement vides, à renseigner avant la vraie saison (via appel API direct en attendant le dashboard admin).
+- URL Netlify définitive du site déployé : inconnue à ce stade (dépôt Git créé et connecté à Netlify, mais l'URL n'a pas été communiquée). Bloque le réglage de `ALLOWED_ORIGIN` sur le backend — sans elle, le CORS refuse toutes les requêtes du front en production.
