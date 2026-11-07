@@ -1,0 +1,14 @@
+# Service + timer systemd pour la sauvegarde quotidienne (M10).
+# Installation : copier ce fichier et boudins-backup.timer vers
+# /etc/systemd/system/, ajuster User/WorkingDirectory, puis :
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now boudins-backup.timer
+[Unit]
+Description=Sauvegarde quotidienne de la base boudins
+
+[Service]
+Type=oneshot
+User=samuel
+WorkingDirectory=/home/samuel/boudins/backend
+EnvironmentFile=/home/samuel/boudins/backend/.env
+ExecStart=/usr/bin/node scripts/backup.js

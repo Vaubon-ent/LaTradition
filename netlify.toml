@@ -1,0 +1,17 @@
+[build]
+  publish = "frontend"
+
+# Redirection proxy /api/* vers le backend exposé via Tailscale Funnel
+# (docs/plan-deploiement.md, mission D1). Même origine côté navigateur
+# (frontend/js/api.js utilise des chemins relatifs /api/*), donc pas de CORS
+# à gérer côté client — status = 200 fait un vrai proxy, pas une redirection
+# visible par le navigateur.
+#
+# TODO (mission D1, docs/plan-deploiement.md) : remplacer <machine>.ts.net
+# par l'URL Tailscale Funnel réelle une fois le Funnel activé sur la machine
+# de production.
+[[redirects]]
+  from = "/api/*"
+  to = "https://<machine>.ts.net/api/:splat"
+  status = 200
+  force = true

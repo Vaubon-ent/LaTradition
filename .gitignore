@@ -1,0 +1,9 @@
+# Dépendances (réinstallées via npm install)
+node_modules/
+
+# Secrets et données locales (.ai/project-rules.md : jamais commités)
+backend/.env
+backend/data/
+
+# Sortie Graphify (régénérable localement, voir CLAUDE.md)
+graphify-out/

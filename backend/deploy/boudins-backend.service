@@ -1,0 +1,20 @@
+# Unité systemd pour le serveur Express (CDC §10, M10).
+# Installation : copier vers /etc/systemd/system/boudins-backend.service,
+# ajuster User/WorkingDirectory, puis :
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now boudins-backend.service
+[Unit]
+Description=Backend boudins (Express)
+After=network.target
+
+[Service]
+Type=simple
+User=samuel
+WorkingDirectory=/home/samuel/boudins/backend
+EnvironmentFile=/home/samuel/boudins/backend/.env
+ExecStart=/usr/bin/node src/server.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

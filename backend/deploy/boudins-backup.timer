@@ -1,0 +1,10 @@
+# Déclenche boudins-backup.service une fois par jour (M10).
+[Unit]
+Description=Déclenchement quotidien de la sauvegarde boudins
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
