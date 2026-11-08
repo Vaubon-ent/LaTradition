@@ -4,6 +4,7 @@
 
 import { createInitialState, setView, setLoginError } from './adminState.js';
 import { ApiError, onUnauthorized, checkSession, login, logout } from './adminApi.js';
+import { mount as mountOrdersView } from './ordersView.js';
 
 function start() {
   let state = createInitialState();
@@ -16,6 +17,16 @@ function start() {
   const loginForm = document.querySelector('[data-role="login-form"]');
   const loginErrorEl = document.querySelector('[data-role="login-error"]');
   const logoutButton = document.querySelector('[data-role="logout"]');
+  const dashboardContent = document.querySelector('[data-role="dashboard-content"]');
+
+  // M-DASH3 : appelé une seule fois par passage en vue dashboard (chargement
+  // avec session valide, ou login réussi) — jamais depuis render(), qui est
+  // aussi appelé pour d'autres transitions et refetcherait sinon à chaque fois.
+  function mountDashboard() {
+    if (dashboardContent) {
+      mountOrdersView(dashboardContent);
+    }
+  }
 
   function update(mutator) {
     state = mutator(state);
@@ -45,6 +56,7 @@ function start() {
       await login(password);
       loginForm.reset();
       update((s) => setLoginError(setView(s, 'dashboard'), null));
+      mountDashboard();
     } catch (err) {
       const message =
         err instanceof ApiError && err.status === 429
@@ -64,7 +76,10 @@ function start() {
   });
 
   checkSession()
-    .then(() => update((s) => setView(s, 'dashboard')))
+    .then(() => {
+      update((s) => setView(s, 'dashboard'));
+      mountDashboard();
+    })
     .catch(() => update((s) => setView(s, 'login')));
 
   render();

@@ -1,7 +1,14 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
 import request from 'supertest';
 import ExcelJS from 'exceljs';
 import { buildTestApp, TEST_ADMIN_PASSWORD } from './helpers/testApp.js';
+
+function makeTempDir() {
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'boudins-admin-export-test-'));
+}
 
 async function loginAgent(app) {
   const agent = request.agent(app);
@@ -78,6 +85,48 @@ describe('GET /api/admin/export.xlsx', () => {
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(res.body);
+    const sheet = workbook.getWorksheet('Commandes');
+    expect(sheet.getRow(2).values).toContain('Dupont');
+  });
+});
+
+describe('POST /api/admin/export/save', () => {
+  let db;
+  let tmpDir;
+
+  afterEach(() => {
+    db?.close();
+    if (tmpDir && fs.existsSync(tmpDir)) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it('refuse sans authentification', async () => {
+    tmpDir = makeTempDir();
+    const built = buildTestApp({ exportsDir: tmpDir });
+    db = built.db;
+    const res = await request(built.app).post('/api/admin/export/save');
+    expect(res.status).toBe(401);
+  });
+
+  it('écrit le fichier sur disque et renvoie son chemin', async () => {
+    tmpDir = makeTempDir();
+    const built = buildTestApp({ exportsDir: tmpDir });
+    db = built.db;
+    await placeOrder(built.app);
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.post('/api/admin/export/save');
+
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(typeof res.body.path).toBe('string');
+
+    const destPath = path.join(tmpDir, 'commandes-2026.xlsx');
+    expect(fs.existsSync(destPath)).toBe(true);
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(fs.readFileSync(destPath));
     const sheet = workbook.getWorksheet('Commandes');
     expect(sheet.getRow(2).values).toContain('Dupont');
   });

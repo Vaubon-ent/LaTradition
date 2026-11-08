@@ -25,9 +25,11 @@
     </section>
 
     <section id="view-dashboard" data-view="dashboard" hidden>
-      <h2>Tableau de bord</h2>
-      <p class="muted">À venir.</p>
-      <button type="button" data-role="logout">Se déconnecter</button>
+      <div class="dashboard-header">
+        <h2>Tableau de bord — Commandes</h2>
+        <button type="button" data-role="logout">Se déconnecter</button>
+      </div>
+      <div data-role="dashboard-content"></div>
     </section>
   </div>
   <script type="module" src="/admin/js/adminApp.js"></script>

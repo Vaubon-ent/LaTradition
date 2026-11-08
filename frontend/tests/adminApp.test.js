@@ -13,6 +13,7 @@ function setupDom() {
       </section>
       <section id="view-dashboard" data-view="dashboard" hidden>
         <button type="button" data-role="logout">Se déconnecter</button>
+        <div data-role="dashboard-content"></div>
       </section>
     </div>
   `;
@@ -39,6 +40,9 @@ function mockFetch({ sessionOk, loginStatus, loginBody } = {}) {
     }
     if (url.includes('/api/admin/logout')) {
       return { ok: true, status: 200, json: async () => ({ ok: true }) };
+    }
+    if (url.includes('/api/admin/orders')) {
+      return { ok: true, status: 200, json: async () => ({ orders: [] }) };
     }
     throw new Error(`URL non mockée : ${url}`);
   });

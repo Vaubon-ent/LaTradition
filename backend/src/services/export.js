@@ -1,4 +1,10 @@
+const fs = require('fs');
+const path = require('path');
 const ExcelJS = require('exceljs');
+
+function getExportsDir() {
+  return path.join(__dirname, '..', '..', 'data', 'exports');
+}
 
 const COLUMNS = [
   { header: 'Date de commande', key: 'created_at' },
@@ -70,4 +76,16 @@ function buildCsv(rows) {
   return '﻿' + [header, ...lines].join('\n') + '\n';
 }
 
-module.exports = { COLUMNS, buildExportRows, buildXlsxBuffer, buildCsv };
+// Un seul fichier par saison, écrasé à chaque export (décision retenue,
+// `.ai/decisions.md` du 2026-11-08) — pas d'historisation des exports
+// manuels intermédiaires.
+async function saveXlsxExport(db, season, { exportsDir = getExportsDir() } = {}) {
+  const rows = buildExportRows(db, season);
+  const buffer = await buildXlsxBuffer(rows);
+  fs.mkdirSync(exportsDir, { recursive: true });
+  const destPath = path.join(exportsDir, `commandes-${season}.xlsx`);
+  fs.writeFileSync(destPath, buffer);
+  return path.relative(path.join(__dirname, '..', '..'), destPath);
+}
+
+module.exports = { COLUMNS, buildExportRows, buildXlsxBuffer, buildCsv, getExportsDir, saveXlsxExport };

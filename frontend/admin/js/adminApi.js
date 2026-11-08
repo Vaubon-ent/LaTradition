@@ -67,4 +67,30 @@ function adminFetch(path, options) {
   });
 }
 
-export { ApiError, onUnauthorized, checkSession, login, logout, adminFetch };
+// Vue commandes du dashboard (M-DASH3, docs/plan-implementation-admin-dashboard.md).
+function fetchOrders() {
+  return adminFetch('/api/admin/orders');
+}
+
+function updateOrderStatus(id, status) {
+  return adminFetch(`/api/admin/orders/${id}/status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
+}
+
+function saveOrdersExport() {
+  return adminFetch('/api/admin/export/save', { method: 'POST' });
+}
+
+export {
+  ApiError,
+  onUnauthorized,
+  checkSession,
+  login,
+  logout,
+  adminFetch,
+  fetchOrders,
+  updateOrderStatus,
+  saveOrdersExport,
+};

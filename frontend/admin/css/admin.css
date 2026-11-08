@@ -27,7 +27,7 @@ body {
 
 #admin-app {
   width: 100%;
-  max-width: 400px;
+  max-width: 1100px;
 }
 
 section {
@@ -36,6 +36,82 @@ section {
   border-radius: 8px;
   padding: 20px;
   text-align: center;
+}
+
+/* Vues login/loading restent étroites et centrées ; le dashboard (tableau
+   des commandes) a besoin de toute la largeur disponible. */
+#view-login,
+#view-loading {
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+#view-dashboard {
+  text-align: left;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.orders-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.orders-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.orders-table th,
+.orders-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.orders-table tbody tr:nth-child(even) {
+  background: var(--color-bg);
+}
+
+.orders-filter-row th {
+  padding-top: 4px;
+  padding-bottom: 8px;
+}
+
+.orders-filter-row input[type='text'],
+.orders-filter-row select {
+  width: 100%;
+  padding: 4px 6px;
+  font-size: 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+}
+
+.row-error {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--color-error-text);
+}
+
+[data-role='orders-message'] {
+  padding: 10px;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  background: var(--color-bg);
+}
+
+[data-role='orders-message'].error {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
 }
 
 label {
