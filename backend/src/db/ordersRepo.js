@@ -1,3 +1,5 @@
+const { updateCustomerPii } = require('./customersRepo');
+
 class DuplicateOrderError extends Error {}
 
 // La contrainte UNIQUE (customer_id, season) de la table `orders` (M2) est le
@@ -97,6 +99,46 @@ function updateOrderStatus(db, id, status) {
   return result.changes > 0;
 }
 
+// Édition admin (M-DASH5) : commande + client associé. Retourne undefined si
+// la commande n'existe pas (le routeur traduit ça en 404).
+function getOrderById(db, id) {
+  return db.prepare('SELECT id, customer_id, season, status, total_cents FROM orders WHERE id = ?').get(id);
+}
+
+// Lignes brutes (avec id, nécessaire pour les UPDATE/DELETE ciblés d'une
+// édition) — distinct de listOrders, qui joint le nom du produit pour
+// l'affichage mais n'expose jamais cet id interne.
+function getOrderItemsForEdit(db, orderId) {
+  return db
+    .prepare('SELECT id, product_id, quantity_500g, unit_price_cents FROM order_items WHERE order_id = ? ORDER BY id')
+    .all(orderId);
+}
+
+// Applique en une seule transaction le diff calculé par
+// services/pricing.buildUpdatedOrderItems ainsi que la mise à jour PII du
+// client associé : une violation de l'unicité du téléphone (DuplicatePhoneError,
+// customersRepo.updateCustomerPii) annule tout le reste (aucune ligne de
+// commande modifiée si le PII est rejeté, et inversement).
+function applyOrderEdit(db, orderId, customerId, pii, { inserts, updates, deleteIds, totalCents }) {
+  const deleteItemStmt = db.prepare('DELETE FROM order_items WHERE id = ?');
+  const updateItemStmt = db.prepare('UPDATE order_items SET quantity_500g = ?, line_total_cents = ? WHERE id = ?');
+  const insertItemStmt = db.prepare(
+    `INSERT INTO order_items (order_id, product_id, quantity_500g, unit_price_cents, line_total_cents)
+     VALUES (@order_id, @product_id, @quantity_500g, @unit_price_cents, @line_total_cents)`
+  );
+  const updateOrderTotalStmt = db.prepare("UPDATE orders SET total_cents = ?, updated_at = datetime('now') WHERE id = ?");
+
+  const run = db.transaction(() => {
+    updateCustomerPii(db, customerId, pii);
+    for (const id of deleteIds) deleteItemStmt.run(id);
+    for (const update of updates) updateItemStmt.run(update.quantity_500g, update.line_total_cents, update.id);
+    for (const insert of inserts) insertItemStmt.run({ order_id: orderId, ...insert });
+    updateOrderTotalStmt.run(totalCents, orderId);
+  });
+
+  run();
+}
+
 // Totaux de production (CDC §6.4) : somme des quantités (en unités de 500 g)
 // par produit, converties en kg, sur toutes les commandes de la saison
 // (aucune commande n'est jamais annulée, cf. CDC §5.4 — donc pas de filtre
@@ -129,6 +171,9 @@ module.exports = {
   hasOrderForSeason,
   listOrders,
   updateOrderStatus,
+  getOrderById,
+  getOrderItemsForEdit,
+  applyOrderEdit,
   getProductionTotals,
   ORDER_STATUSES,
 };

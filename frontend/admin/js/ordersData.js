@@ -85,6 +85,59 @@ function matchesFilters(order, filters) {
   return true;
 }
 
+const SORT_ACCESSORS = {
+  last_name: (order) => order.last_name.toLowerCase(),
+  first_name: (order) => order.first_name.toLowerCase(),
+  phone: (order) => order.phone,
+  created_at: (order) => order.created_at,
+  paid: (order) => (isPaid(order.status) ? 1 : 0),
+  pickedUp: (order) => (isPickedUp(order.status) ? 1 : 0),
+};
+for (const { id } of PRODUCT_COLUMNS) {
+  SORT_ACCESSORS[id] = (order) => kgForProduct(order, id);
+}
+
+function compareValues(a, b) {
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
+}
+
+// sort : { column: string|null, direction: 'asc'|'desc' }. Colonne inconnue
+// ou absente → tableau renvoyé tel quel (ordre serveur, par défaut
+// created_at DESC, voir ordersRepo.listOrders).
+function sortOrders(orders, sort) {
+  const getValue = sort?.column && SORT_ACCESSORS[sort.column];
+  if (!getValue) return orders;
+  const factor = sort.direction === 'desc' ? -1 : 1;
+  return [...orders].sort((a, b) => factor * compareValues(getValue(a), getValue(b)));
+}
+
+// Pas 0,5 kg, jamais négatif (M-DASH5, édition client/commande) — même
+// convention que le stepper du parcours client (frontend/js/state.js),
+// réimplémentée ici en local pour ne pas créer de dépendance entre les deux
+// bundles front (client vs admin), qui restent volontairement indépendants.
+function roundToHalfKg(kg) {
+  const rounded = Math.round(kg * 2) / 2;
+  return rounded > 0 ? rounded : 0;
+}
+
+// kg (float, pas 0,5) → quantity_500g (entier), unité stockée en base.
+function kgToQuantity500g(kg) {
+  return Math.round(roundToHalfKg(kg) * 2);
+}
+
+// quantitiesByProduct : { [productId]: kg } (valeurs issues du formulaire
+// d'édition) → payload items pour PUT /api/admin/orders/:id. Les quantités à
+// 0 (ou absentes) sont omises : le serveur traite leur absence comme un
+// retrait du produit de la commande (services/pricing.buildUpdatedOrderItems).
+function buildEditItemsPayload(quantitiesByProduct) {
+  return PRODUCT_COLUMNS.map(({ id }) => ({
+    product_id: id,
+    quantity_500g: kgToQuantity500g(quantitiesByProduct[id] || 0),
+  })).filter((item) => item.quantity_500g > 0);
+}
+
 export {
   PRODUCT_COLUMNS,
   kgForProduct,
@@ -95,4 +148,8 @@ export {
   formatDate,
   formatKg,
   matchesFilters,
+  sortOrders,
+  roundToHalfKg,
+  kgToQuantity500g,
+  buildEditItemsPayload,
 };

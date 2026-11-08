@@ -36,4 +36,28 @@ function anonymizeCustomer(db, id) {
   return result.changes > 0;
 }
 
-module.exports = { findCustomerByPhone, findOrCreateCustomer, anonymizeCustomer };
+class DuplicatePhoneError extends Error {}
+
+// Édition PII par l'admin (M-DASH5) : le téléphone reste UNIQUE (schema.js),
+// donc on traduit sa violation en erreur métier lisible — sauf si le numéro
+// demandé est déjà celui du client qu'on modifie (no-op légitime), seul cas
+// autorisé (décision retenue du 2026-11-08). Pensée pour être appelée à
+// l'intérieur d'une transaction plus large (ordersRepo.applyOrderEdit).
+function updateCustomerPii(db, id, { first_name, last_name, phone }) {
+  const existingWithPhone = db.prepare('SELECT id FROM customers WHERE phone = ?').get(phone);
+  if (existingWithPhone && existingWithPhone.id !== id) {
+    throw new DuplicatePhoneError('Ce numéro de téléphone est déjà utilisé par un autre client.');
+  }
+  const result = db
+    .prepare('UPDATE customers SET first_name = ?, last_name = ?, phone = ? WHERE id = ?')
+    .run(first_name, last_name, phone, id);
+  return result.changes > 0;
+}
+
+module.exports = {
+  findCustomerByPhone,
+  findOrCreateCustomer,
+  anonymizeCustomer,
+  updateCustomerPii,
+  DuplicatePhoneError,
+};

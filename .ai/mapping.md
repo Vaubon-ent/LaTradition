@@ -97,7 +97,7 @@
 - Utilisé par : `backend/src/app.js`.
 
 ### `backend/src/services/export.js`
-- Rôle : construction des lignes d'export (une ligne par produit commandé) et génération xlsx (`exceljs`)/CSV (`;`, BOM UTF-8) — CDC §6.5.
+- Rôle : construction des lignes d'export (une ligne par produit commandé) et génération xlsx (`exceljs`)/CSV (`;`, BOM UTF-8) — CDC §6.5. Depuis M-DASH1 (2026-11-08) : aussi `getExportsDir()` (défaut `backend/data/exports/`) et `saveXlsxExport(db, season, { exportsDir })` — écrit `commandes-{season}.xlsx` sur disque serveur (écrase à chaque appel), réutilisé par `POST /api/admin/export/save`.
 - Dépend de : `exceljs`.
 - Utilisé par : `backend/src/routes/admin/export.js`.
 
@@ -133,18 +133,18 @@
 - Vérifié manuellement en conditions réelles (backend réel sur `127.0.0.1:3101`, front servi statiquement) : parcours complet jusqu'à confirmation, et parcours avec téléphone en doublon (avertissement affiché, navigation non bloquée).
 - Dépend de : les 4 endpoints publics du backend (`GET /api/products`, `GET /api/settings/public`, `POST /api/check-phone`, `POST /api/orders`).
 
-> Socle d'authentification du dashboard admin : voir `frontend/admin/` ci-dessous. Contenu métier des vues (commandes, production, produits, paramètres, export, clients) toujours entièrement à faire (voir point de scope ouvert, `docs/plan-implementation-frontend.md` et `docs/plan-implementation-admin.md`).
-
-### `frontend/admin/` (socle d'authentification, M-ADM1/M-ADM2, 2026-11-08)
-- Rôle : point d'entrée `/admin` — login, détection de session, gestion globale de l'expiration de session (401). Ne couvre pas le contenu métier des vues (hors scope, voir `docs/plan-implementation-admin.md`).
-- `index.html` : 3 `<section data-view>` (`loading`, `login`, `dashboard` — placeholder vide) jamais détruites/recréées ; seule `hidden` change (même pattern que `frontend/index.html`). Tous les chemins (CSS, JS, appels API) écrits en absolu depuis la racine du domaine (`/admin/...`, `/api/admin/...`), jamais en relatif — convention actée en Decision-Gel du 2026-11-08 pour neutraliser le risque propre à un sous-dossier.
+### `frontend/admin/` (socle d'authentification M-ADM1/M-ADM2/M-ADM3, 2026-11-08 ; vue commandes M-DASH1→M-DASH4, 2026-11-08)
+- Rôle : point d'entrée `/admin` — login, détection de session, gestion globale de l'expiration de session (401), et depuis M-DASH3 le contenu métier de la vue dashboard (tableau des commandes).
+- `index.html` : 3 `<section data-view>` (`loading`, `login`, `dashboard`) jamais détruites/recréées ; seule `hidden` change (même pattern que `frontend/index.html`). Depuis M-DASH3, `dashboard` ne contient plus qu'un en-tête + un conteneur vide (`[data-role="dashboard-content"]`) rempli entièrement par `ordersView.js`. Tous les chemins (CSS, JS, appels API) écrits en absolu depuis la racine du domaine (`/admin/...`, `/api/admin/...`), jamais en relatif — convention actée en Decision-Gel du 2026-11-08.
 - `js/adminState.js` : état plat `{ view, loginError }`, fonctions pures, aucune dépendance au DOM — même pattern que `../../js/state.js`.
-- `js/adminApi.js` : `checkSession`/`login`/`logout`, et `adminFetch` (wrapper générique destiné aux futures vues métier) + `onUnauthorized(handler)` — enregistrement d'un callback unique appelé par `adminFetch` sur tout 401, pour que les futures vues n'aient rien à gérer elles-mêmes.
-- `js/adminApp.js` : orchestrateur — détection de session au chargement (`loading` → `login`/`dashboard`), soumission login (401 → message, 429 → message dédié « trop de tentatives »), logout, et enregistrement du handler `onUnauthorized` (bascule vers `login` + « session expirée, reconnectez-vous » à tout moment, pas seulement au chargement).
-- `css/admin.css` : feuille dédiée et minimale, indépendante de `frontend/css/styles.css`.
-- Tests (`frontend/tests/{adminState,adminApi,adminApp}.test.js`) : 18 tests (état pur, wrappers API mockés incluant `adminFetch`/`onUnauthorized`, intégration DOM jsdom couvrant chargement/login/logout/expiration 401 en cours d'usage/convention de chemins absolus). 51 tests front verts au total.
-- Dépend de : `GET /api/admin/session` (M-ADM1, backend), `POST /api/admin/{login,logout}` (M5, existants).
-- M-ADM3 (vérification manuelle en conditions réelles) : pas encore exécutée, dépend du déblocage infra (502/CORS, voir État courant de `.ai/project-context.md`).
+- `js/adminApi.js` : `checkSession`/`login`/`logout`, `adminFetch` + `onUnauthorized(handler)` (centralise la détection de 401 pour toutes les vues métier) ; depuis M-DASH3 : `fetchOrders`/`updateOrderStatus`/`saveOrdersExport`.
+- `js/adminApp.js` : orchestrateur — détection de session au chargement, login (401/429), logout, handler `onUnauthorized` ; depuis M-DASH3, appelle `ordersView.mount(dashboardContent)` à chaque passage en vue dashboard (chargement avec session valide, ou login réussi) — jamais depuis `render()`.
+- `js/ordersData.js` (M-DASH2, pur, sans DOM) : `PRODUCT_COLUMNS`, `kgForProduct`, `isPaid`/`isPickedUp` (mapping sur `orders.status` existant, Option A, `.ai/decisions.md`), `statusAfterPaidToggle`/`statusAfterPickedUpToggle` (règle de transition de statut), `formatDate`/`formatKg`, `matchesFilters`.
+- `js/ordersView.js` (M-DASH3, DOM) : `mount(root)` — construit tableau + filtres + boutons d'action, filtrage en mémoire (pas de refetch), délégation d'événements sur `<tbody>`. Cases Payé/Récupéré → `PATCH .../status` ; bouton Exporter → `POST /export/save` ; boutons Clôturer/Nouvelle campagne → message stub, aucun appel réseau.
+- `css/admin.css` : feuille dédiée, indépendante de `frontend/css/styles.css`. Depuis M-DASH3 : dashboard élargi (1100px), login/loading restent étroits et centrés.
+- Tests (`frontend/tests/{adminState,adminApi,adminApp,ordersData,ordersView}.test.js`) : état pur, wrappers API mockés, intégration DOM jsdom (chargement/login/logout/401, montage tableau, filtrage sans refetch, transitions payé/récupéré avec revert sur échec, export, boutons stub sans réseau). **87 tests front verts au total** (11 fichiers).
+- Dépend de : `GET /api/admin/session` (M-ADM1), `POST /api/admin/{login,logout}` (M5), `GET /api/admin/orders`/`PATCH /api/admin/orders/:id/status` (M6), `POST /api/admin/export/save` (M-DASH1).
+- M-ADM3 **validée** le 2026-11-08 (login réel en production). M-DASH4 (vérification manuelle réelle) faite en local uniquement (backend réel, API réelle) — **pas de clic réel en navigateur** (outil navigateur indisponible dans la session d'implémentation), reste à faire par l'utilisateur ou en session avec outil navigateur, ainsi que la vérification en production une fois Netlify redéployé.
 
 ### `netlify.toml` (2026-11-07, `docs/plan-deploiement.md` mission D4)
 - Rôle : publie `frontend/` comme site statique Netlify, redirige `/api/*` en proxy (status 200) vers l'URL Tailscale Funnel du backend — même origine côté navigateur, cohérent avec `frontend/js/api.js` (chemins relatifs par défaut).

@@ -117,6 +117,105 @@ describe('ordersView — case Récupéré', () => {
   });
 });
 
+describe('ordersView — tri par en-tête', () => {
+  it('clic sur l\'en-tête Nom trie croissant, un 2e clic inverse, sans nouvel appel réseau', async () => {
+    mockFetch({
+      orders: [
+        makeOrder({ id: 1, last_name: 'Martin' }),
+        makeOrder({ id: 2, last_name: 'Dupont' }),
+        makeOrder({ id: 3, last_name: 'Bernard' }),
+      ],
+    });
+    const root = getContainer();
+    await mount(root);
+    const callsBefore = global.fetch.mock.calls.length;
+
+    const header = root.querySelector('[data-sort-key="last_name"]');
+    header.click();
+    let rows = root.querySelectorAll('tbody tr');
+    expect(Array.from(rows).map((r) => r.textContent)).toEqual([
+      expect.stringContaining('Bernard'),
+      expect.stringContaining('Dupont'),
+      expect.stringContaining('Martin'),
+    ]);
+    expect(root.querySelector('[data-sort-indicator="last_name"]').textContent).toContain('▲');
+
+    header.click();
+    rows = root.querySelectorAll('tbody tr');
+    expect(Array.from(rows).map((r) => r.textContent)).toEqual([
+      expect.stringContaining('Martin'),
+      expect.stringContaining('Dupont'),
+      expect.stringContaining('Bernard'),
+    ]);
+    expect(root.querySelector('[data-sort-indicator="last_name"]').textContent).toContain('▼');
+
+    expect(global.fetch.mock.calls.length).toBe(callsBefore);
+  });
+
+  it('le tri reste appliqué après un filtrage', async () => {
+    mockFetch({
+      orders: [
+        makeOrder({ id: 1, last_name: 'Martin' }),
+        makeOrder({ id: 2, last_name: 'Dupont' }),
+        makeOrder({ id: 3, last_name: 'Bernard' }),
+      ],
+    });
+    const root = getContainer();
+    await mount(root);
+
+    root.querySelector('[data-sort-key="last_name"]').click();
+    const filterInput = root.querySelector('[data-filter="last_name"]');
+    filterInput.value = 'a';
+    filterInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const rows = root.querySelectorAll('tbody tr');
+    expect(Array.from(rows).map((r) => r.textContent)).toEqual([
+      expect.stringContaining('Bernard'),
+      expect.stringContaining('Martin'),
+    ]);
+  });
+});
+
+describe('ordersView — édition commande (colonne Actions)', () => {
+  it('clic sur Modifier ouvre la modale pré-remplie avec les données de la bonne commande', async () => {
+    mockFetch({ orders: [makeOrder({ id: 1, last_name: 'Dupont' }), makeOrder({ id: 2, last_name: 'Martin' })] });
+    const root = getContainer();
+    await mount(root);
+
+    root.querySelector('[data-order-id="2"][data-role="edit-order"]').click();
+
+    const dialog = root.querySelector('.order-edit-dialog');
+    expect(dialog.querySelector('[name="last_name"]').value).toBe('Martin');
+  });
+
+  it('après un enregistrement réussi, la liste est rechargée (nouveau GET /api/admin/orders)', async () => {
+    mockFetch({ orders: [makeOrder({ id: 1, last_name: 'Dupont' })] });
+    const root = getContainer();
+    await mount(root);
+    const callsBefore = global.fetch.mock.calls.length;
+
+    root.querySelector('[data-role="edit-order"]').click();
+    const dialog = root.querySelector('.order-edit-dialog');
+    const form = dialog.querySelector('[data-role="order-edit-form"]');
+    global.fetch = vi.fn(async (url, options = {}) => {
+      if (options.method === 'PUT') {
+        return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      }
+      if (url.includes('/api/admin/orders')) {
+        return { ok: true, status: 200, json: async () => ({ orders: [makeOrder({ id: 1, last_name: 'Dupont-Martin' })] }) };
+      }
+      throw new Error(`URL non mockée : ${url}`);
+    });
+    form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+    await flush();
+
+    expect(global.fetch.mock.calls.some(([, opts]) => opts?.method === 'PUT')).toBe(true);
+    expect(global.fetch.mock.calls.some(([url, opts]) => !opts?.method && url.includes('/api/admin/orders'))).toBe(true);
+    const rows = root.querySelectorAll('tbody tr');
+    expect(rows[0].textContent).toContain('Dupont-Martin');
+  });
+});
+
 describe('ordersView — export', () => {
   it('clic sur Exporter déclenche POST /api/admin/export/save et affiche le chemin retourné', async () => {
     mockFetch({ orders: [makeOrder()] });

@@ -9,6 +9,7 @@ import {
   fetchOrders,
   updateOrderStatus,
   saveOrdersExport,
+  updateOrder,
 } from '../admin/js/adminApi.js';
 
 function mockFetchOnce(status, body) {
@@ -93,5 +94,23 @@ describe('adminApi', () => {
     const [url, options] = global.fetch.mock.calls[0];
     expect(url).toContain('/api/admin/export/save');
     expect(options.method).toBe('POST');
+  });
+
+  it('updateOrder envoie un PUT avec le payload PII + items', async () => {
+    mockFetchOnce(200, { ok: true });
+    const payload = { first_name: 'Jeanne', last_name: 'Dupont', phone: '0612345678', items: [{ product_id: 'blanc', quantity_500g: 4 }] };
+    await expect(updateOrder(42, payload)).resolves.toEqual({ ok: true });
+    const [url, options] = global.fetch.mock.calls[0];
+    expect(url).toContain('/api/admin/orders/42');
+    expect(options.method).toBe('PUT');
+    expect(JSON.parse(options.body)).toEqual(payload);
+  });
+
+  it('updateOrder rejette avec une ApiError portant le message serveur (ex. 409 doublon téléphone)', async () => {
+    mockFetchOnce(409, { error: 'Ce numéro de téléphone est déjà utilisé par un autre client.' });
+    await expect(updateOrder(42, {})).rejects.toMatchObject({
+      status: 409,
+      message: 'Ce numéro de téléphone est déjà utilisé par un autre client.',
+    });
   });
 });

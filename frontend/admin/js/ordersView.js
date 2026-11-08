@@ -13,7 +13,24 @@ import {
   formatDate,
   formatKg,
   matchesFilters,
+  sortOrders,
 } from './ordersData.js';
+import { mount as mountOrderEditModal } from './orderEditModal.js';
+
+// clé de tri → libellé, dans l'ordre des colonnes du tableau.
+const SORTABLE_COLUMNS = [
+  { key: 'last_name', label: 'Nom' },
+  { key: 'first_name', label: 'Prénom' },
+  { key: 'phone', label: 'Tél.' },
+  ...PRODUCT_COLUMNS.map((c) => ({ key: c.id, label: `${c.label} (kg)` })),
+  { key: 'created_at', label: 'Date de commande' },
+  { key: 'paid', label: 'Payé' },
+  { key: 'pickedUp', label: 'Récupéré' },
+];
+
+function sortableHeader({ key, label }) {
+  return `<button type="button" class="sort-btn" data-sort-key="${key}">${label}<span class="sort-indicator" data-sort-indicator="${key}"></span></button>`;
+}
 
 function emptyFilters() {
   return {
@@ -34,6 +51,7 @@ function emptyFilters() {
 function mount(root) {
   let orders = [];
   let filters = emptyFilters();
+  let sort = { column: null, direction: 'asc' };
 
   root.innerHTML = `
     <p data-role="orders-message" hidden></p>
@@ -45,13 +63,14 @@ function mount(root) {
     <table class="orders-table">
       <thead>
         <tr>
-          <th>Nom</th>
-          <th>Prénom</th>
-          <th>Tél.</th>
-          ${PRODUCT_COLUMNS.map((c) => `<th>${c.label} (kg)</th>`).join('')}
-          <th>Date de commande</th>
-          <th>Payé</th>
-          <th>Récupéré</th>
+          <th>${sortableHeader(SORTABLE_COLUMNS[0])}</th>
+          <th>${sortableHeader(SORTABLE_COLUMNS[1])}</th>
+          <th>${sortableHeader(SORTABLE_COLUMNS[2])}</th>
+          ${PRODUCT_COLUMNS.map((c) => `<th>${sortableHeader({ key: c.id, label: `${c.label} (kg)` })}</th>`).join('')}
+          <th>${sortableHeader({ key: 'created_at', label: 'Date de commande' })}</th>
+          <th class="col-paid">${sortableHeader({ key: 'paid', label: 'Payé' })}</th>
+          <th class="col-pickedup">${sortableHeader({ key: 'pickedUp', label: 'Récupéré' })}</th>
+          <th>Actions</th>
         </tr>
         <tr class="orders-filter-row">
           <th><input type="text" data-filter="last_name" aria-label="Filtrer par nom" /></th>
@@ -61,20 +80,21 @@ function mount(root) {
             (c) => `<th><input type="text" data-filter-kg="${c.id}" aria-label="Filtrer par kg ${c.label}" /></th>`
           ).join('')}
           <th><input type="text" data-filter="created_at" aria-label="Filtrer par date" /></th>
-          <th>
+          <th class="col-paid">
             <select data-filter="paid" aria-label="Filtrer par payé">
               <option value="all">Tous</option>
               <option value="yes">Oui</option>
               <option value="no">Non</option>
             </select>
           </th>
-          <th>
+          <th class="col-pickedup">
             <select data-filter="pickedUp" aria-label="Filtrer par récupéré">
               <option value="all">Tous</option>
               <option value="yes">Oui</option>
               <option value="no">Non</option>
             </select>
           </th>
+          <th></th>
         </tr>
       </thead>
       <tbody data-role="orders-tbody"></tbody>
@@ -83,6 +103,7 @@ function mount(root) {
 
   const messageEl = root.querySelector('[data-role="orders-message"]');
   const tbody = root.querySelector('[data-role="orders-tbody"]');
+  const thead = root.querySelector('thead');
 
   function showMessage(text, isError = false) {
     messageEl.hidden = !text;
@@ -90,8 +111,14 @@ function mount(root) {
     messageEl.classList.toggle('error', Boolean(isError));
   }
 
+  function updateSortIndicators() {
+    root.querySelectorAll('[data-sort-indicator]').forEach((el) => {
+      el.textContent = el.dataset.sortIndicator === sort.column ? (sort.direction === 'desc' ? ' ▼' : ' ▲') : '';
+    });
+  }
+
   function renderRows() {
-    const visible = orders.filter((order) => matchesFilters(order, filters));
+    const visible = sortOrders(orders.filter((order) => matchesFilters(order, filters)), sort);
     tbody.innerHTML = visible
       .map((order) => {
         const paid = isPaid(order.status);
@@ -111,6 +138,7 @@ function mount(root) {
           <input type="checkbox" data-role="pickedup-checkbox" data-order-id="${order.id}" ${pickedUp ? 'checked' : ''} />
           <span class="row-error" data-role="pickedup-error" hidden></span>
         </td>
+        <td><button type="button" data-role="edit-order" data-order-id="${order.id}">Modifier</button></td>
       </tr>
     `;
       })
@@ -130,6 +158,19 @@ function mount(root) {
       filters = { ...filters, kg: { ...filters.kg, [el.dataset.filterKg]: el.value } };
       renderRows();
     });
+  });
+
+  // Clic sur un en-tête : 1er clic → tri croissant, 2e clic sur la même
+  // colonne → décroissant, clic sur une autre colonne → repart en croissant.
+  // Délégation sur <thead> (pas de reconstruction des <th>, les filtres
+  // gardent le focus) ; seuls les indicateurs ▲/▼ sont mis à jour en place.
+  thead.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-sort-key]');
+    if (!button) return;
+    const key = button.dataset.sortKey;
+    sort = { column: key, direction: sort.column === key && sort.direction === 'asc' ? 'desc' : 'asc' };
+    updateSortIndicators();
+    renderRows();
   });
 
   async function handleStatusChange(orderId, checkbox, toggleFn, errorSelector) {
@@ -161,6 +202,29 @@ function mount(root) {
     }
   });
 
+  function loadOrders() {
+    return fetchOrders()
+      .then(({ orders: fetched }) => {
+        orders = fetched;
+        renderRows();
+      })
+      .catch(() => {
+        showMessage('Impossible de charger les commandes.', true);
+      });
+  }
+
+  // M-DASH5 : édition PII + lignes de commande, popup. Rechargement complet
+  // après un enregistrement réussi (volume quelques centaines de
+  // commandes/saison, pas besoin d'un merge local plus fin).
+  const editModal = mountOrderEditModal(root, { onSaved: loadOrders });
+
+  tbody.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-role="edit-order"]');
+    if (!button) return;
+    const order = orders.find((o) => String(o.id) === String(button.dataset.orderId));
+    if (order) editModal.open(order);
+  });
+
   root.querySelector('[data-role="export-orders"]').addEventListener('click', async () => {
     try {
       const result = await saveOrdersExport();
@@ -179,14 +243,7 @@ function mount(root) {
     showMessage('pas encore implémenté');
   });
 
-  return fetchOrders()
-    .then(({ orders: fetched }) => {
-      orders = fetched;
-      renderRows();
-    })
-    .catch(() => {
-      showMessage('Impossible de charger les commandes.', true);
-    });
+  return loadOrders();
 }
 
 export { mount };

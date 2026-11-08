@@ -141,6 +141,187 @@ describe('PATCH /api/admin/orders/:id/status', () => {
   });
 });
 
+describe('PUT /api/admin/orders/:id', () => {
+  let db;
+
+  afterEach(() => {
+    db?.close();
+  });
+
+  it('modifie les PII du client et la quantité d\'une ligne, en conservant le prix unitaire figé', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, { items: [{ product_id: 'blanc', quantity_500g: 2 }] });
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+    const originalUnitPrice = db.prepare('SELECT unit_price_cents FROM order_items WHERE order_id = ?').get(orderId)
+      .unit_price_cents;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.put(`/api/admin/orders/${orderId}`).send({
+      first_name: 'Jeanne-Marie',
+      last_name: 'Dupont',
+      phone: '06 12 34 56 78',
+      items: [{ product_id: 'blanc', quantity_500g: 6 }],
+    });
+
+    expect(res.status).toBe(200);
+    const customerId = db.prepare('SELECT customer_id FROM orders WHERE id = ?').get(orderId).customer_id;
+    expect(db.prepare('SELECT first_name FROM customers WHERE id = ?').get(customerId).first_name).toBe('Jeanne-Marie');
+    const item = db.prepare('SELECT quantity_500g, unit_price_cents, line_total_cents FROM order_items WHERE order_id = ?').get(orderId);
+    expect(item.quantity_500g).toBe(6);
+    expect(item.unit_price_cents).toBe(originalUnitPrice);
+    expect(item.line_total_cents).toBe(6 * originalUnitPrice);
+    expect(db.prepare('SELECT total_cents FROM orders WHERE id = ?').get(orderId).total_cents).toBe(6 * originalUnitPrice);
+  });
+
+  it('ajoute un nouveau produit à la commande (prix dérivé du tarif actuel)', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, { items: [{ product_id: 'blanc', quantity_500g: 2 }] });
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.put(`/api/admin/orders/${orderId}`).send({
+      first_name: 'Jeanne',
+      last_name: 'Dupont',
+      phone: '06 12 34 56 78',
+      items: [
+        { product_id: 'blanc', quantity_500g: 2 },
+        { product_id: 'noir', quantity_500g: 1 },
+      ],
+    });
+
+    expect(res.status).toBe(200);
+    const items = db.prepare('SELECT product_id FROM order_items WHERE order_id = ? ORDER BY product_id').all(orderId);
+    expect(items.map((i) => i.product_id)).toEqual(['blanc', 'noir']);
+  });
+
+  it('retire un produit de la commande (quantité ramenée à 0)', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, {
+      items: [
+        { product_id: 'blanc', quantity_500g: 2 },
+        { product_id: 'noir', quantity_500g: 1 },
+      ],
+    });
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.put(`/api/admin/orders/${orderId}`).send({
+      first_name: 'Jeanne',
+      last_name: 'Dupont',
+      phone: '06 12 34 56 78',
+      items: [{ product_id: 'blanc', quantity_500g: 2 }],
+    });
+
+    expect(res.status).toBe(200);
+    const items = db.prepare('SELECT product_id FROM order_items WHERE order_id = ?').all(orderId);
+    expect(items).toHaveLength(1);
+    expect(items[0].product_id).toBe('blanc');
+  });
+
+  it('rejette si plus aucun produit n\'a de quantité positive', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, { items: [{ product_id: 'blanc', quantity_500g: 2 }] });
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.put(`/api/admin/orders/${orderId}`).send({
+      first_name: 'Jeanne',
+      last_name: 'Dupont',
+      phone: '06 12 34 56 78',
+      items: [{ product_id: 'blanc', quantity_500g: 0 }],
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejette un téléphone invalide sans toucher aux données existantes', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, { items: [{ product_id: 'blanc', quantity_500g: 2 }] });
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.put(`/api/admin/orders/${orderId}`).send({
+      first_name: 'Jeanne',
+      last_name: 'Dupont',
+      phone: 'pas un numéro',
+      items: [{ product_id: 'blanc', quantity_500g: 2 }],
+    });
+
+    expect(res.status).toBe(400);
+    const customerId = db.prepare('SELECT customer_id FROM orders WHERE id = ?').get(orderId).customer_id;
+    expect(db.prepare('SELECT phone FROM customers WHERE id = ?').get(customerId).phone).toBe('0612345678');
+  });
+
+  it('rejette (409) si le nouveau téléphone appartient à un autre client, sans rien modifier', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, { phone: '06 11 11 11 11', items: [{ product_id: 'blanc', quantity_500g: 1 }] });
+    await placeOrder(built.app, { phone: '06 22 22 22 22', last_name: 'Martin', items: [{ product_id: 'noir', quantity_500g: 1 }] });
+    const orderId = db
+      .prepare("SELECT orders.id AS id FROM orders JOIN customers ON customers.id = orders.customer_id WHERE customers.phone = '0611111111'")
+      .get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.put(`/api/admin/orders/${orderId}`).send({
+      first_name: 'Jeanne',
+      last_name: 'Dupont',
+      phone: '06 22 22 22 22',
+      items: [{ product_id: 'blanc', quantity_500g: 1 }],
+    });
+
+    expect(res.status).toBe(409);
+    const customerId = db.prepare('SELECT customer_id FROM orders WHERE id = ?').get(orderId).customer_id;
+    expect(db.prepare('SELECT phone FROM customers WHERE id = ?').get(customerId).phone).toBe('0611111111');
+  });
+
+  it('autorise de resoumettre le même téléphone que celui déjà enregistré pour ce client (no-op)', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, { items: [{ product_id: 'blanc', quantity_500g: 2 }] });
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.put(`/api/admin/orders/${orderId}`).send({
+      first_name: 'Jeanne',
+      last_name: 'Dupont',
+      phone: '06 12 34 56 78',
+      items: [{ product_id: 'blanc', quantity_500g: 2 }],
+    });
+
+    expect(res.status).toBe(200);
+  });
+
+  it('renvoie 404 pour une commande inexistante', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+    const res = await agent.put('/api/admin/orders/9999').send({
+      first_name: 'Jeanne',
+      last_name: 'Dupont',
+      phone: '06 12 34 56 78',
+      items: [{ product_id: 'blanc', quantity_500g: 2 }],
+    });
+    expect(res.status).toBe(404);
+  });
+
+  it('refuse sans authentification', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const res = await request(built.app).put('/api/admin/orders/1').send({
+      first_name: 'Jeanne',
+      last_name: 'Dupont',
+      phone: '06 12 34 56 78',
+      items: [{ product_id: 'blanc', quantity_500g: 2 }],
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('GET /api/admin/production', () => {
   let db;
 

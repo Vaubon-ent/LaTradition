@@ -27,7 +27,6 @@ body {
 
 #admin-app {
   width: 100%;
-  max-width: 1100px;
 }
 
 section {
@@ -39,7 +38,7 @@ section {
 }
 
 /* Vues login/loading restent étroites et centrées ; le dashboard (tableau
-   des commandes) a besoin de toute la largeur disponible. */
+   des commandes) occupe 80% de la largeur de la page. */
 #view-login,
 #view-loading {
   max-width: 400px;
@@ -47,6 +46,9 @@ section {
 }
 
 #view-dashboard {
+  width: 80vw;
+  max-width: 1800px;
+  margin: 0 auto;
   text-align: left;
 }
 
@@ -94,6 +96,34 @@ section {
   font-size: 0.85rem;
   border: 1px solid var(--color-border);
   border-radius: 4px;
+}
+
+.col-paid,
+.col-pickedup {
+  min-width: 130px;
+}
+
+.sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  margin: 0;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: inherit;
+  cursor: pointer;
+}
+
+.sort-btn:hover,
+.sort-btn:focus-visible {
+  text-decoration: underline;
+}
+
+.sort-indicator {
+  font-size: 0.75rem;
 }
 
 .row-error {
@@ -156,4 +186,48 @@ button.primary {
 
 .muted {
   color: #7a6a55;
+}
+
+.order-edit-dialog {
+  width: min(420px, 90vw);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 20px;
+}
+
+.order-edit-dialog::backdrop {
+  background: rgba(42, 32, 22, 0.4);
+}
+
+.order-edit-dialog h3 {
+  margin-top: 0;
+}
+
+.order-edit-dialog fieldset {
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  margin: 12px 0;
+}
+
+.order-edit-dialog label {
+  text-align: left;
+}
+
+.order-edit-dialog input[type='text'],
+.order-edit-dialog input[type='tel'],
+.order-edit-dialog input[type='number'] {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  font-size: 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+.order-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
 }

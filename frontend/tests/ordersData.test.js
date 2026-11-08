@@ -9,6 +9,10 @@ import {
   formatDate,
   formatKg,
   matchesFilters,
+  sortOrders,
+  roundToHalfKg,
+  kgToQuantity500g,
+  buildEditItemsPayload,
 } from '../admin/js/ordersData.js';
 
 function makeOrder(overrides = {}) {
@@ -148,5 +152,78 @@ describe('ordersData.matchesFilters', () => {
 describe('ordersData.PRODUCT_COLUMNS', () => {
   it('expose les 3 types de boudin dans le bon ordre', () => {
     expect(PRODUCT_COLUMNS.map((c) => c.id)).toEqual(['noir', 'blanc', 'blanc_morue']);
+  });
+});
+
+describe('ordersData.sortOrders', () => {
+  const a = makeOrder({ id: 1, last_name: 'Martin', phone: '0600000002', items: [{ product_id: 'noir', quantity_500g: 4 }] });
+  const b = makeOrder({ id: 2, last_name: 'Dupont', phone: '0600000001', items: [{ product_id: 'noir', quantity_500g: 1 }] });
+  const c = makeOrder({ id: 3, last_name: 'Bernard', phone: '0600000003', items: [{ product_id: 'noir', quantity_500g: 2 }] });
+
+  it('sans colonne de tri → ordre d\'origine inchangé', () => {
+    expect(sortOrders([a, b, c], { column: null, direction: 'asc' })).toEqual([a, b, c]);
+  });
+
+  it('tri croissant sur une colonne texte (insensible à la casse)', () => {
+    const sorted = sortOrders([a, b, c], { column: 'last_name', direction: 'asc' });
+    expect(sorted.map((o) => o.last_name)).toEqual(['Bernard', 'Dupont', 'Martin']);
+  });
+
+  it('tri décroissant sur une colonne texte', () => {
+    const sorted = sortOrders([a, b, c], { column: 'last_name', direction: 'desc' });
+    expect(sorted.map((o) => o.last_name)).toEqual(['Martin', 'Dupont', 'Bernard']);
+  });
+
+  it('tri croissant/décroissant sur une colonne kg produit', () => {
+    expect(sortOrders([a, b, c], { column: 'noir', direction: 'asc' }).map((o) => o.id)).toEqual([2, 3, 1]);
+    expect(sortOrders([a, b, c], { column: 'noir', direction: 'desc' }).map((o) => o.id)).toEqual([1, 3, 2]);
+  });
+
+  it('tri sur payé/récupéré (booléen dérivé du statut, non-payé/non-récupéré avant)', () => {
+    const recue = makeOrder({ id: 1, status: 'recue' });
+    const payee = makeOrder({ id: 2, status: 'payee' });
+    const retiree = makeOrder({ id: 3, status: 'retiree' });
+    // "payé" : recue (non payé) doit passer avant payee/retiree (payés).
+    expect(sortOrders([retiree, recue, payee], { column: 'paid', direction: 'asc' })[0].id).toBe(1);
+    // "récupéré" : seul retiree est récupéré, doit passer en dernier.
+    expect(sortOrders([retiree, recue, payee], { column: 'pickedUp', direction: 'asc' }).at(-1).id).toBe(3);
+  });
+
+  it('ne modifie pas le tableau d\'origine (immutabilité)', () => {
+    const original = [a, b, c];
+    sortOrders(original, { column: 'last_name', direction: 'asc' });
+    expect(original).toEqual([a, b, c]);
+  });
+});
+
+describe('ordersData.roundToHalfKg / kgToQuantity500g', () => {
+  it('arrondit au pas de 0,5 kg le plus proche', () => {
+    expect(roundToHalfKg(1.3)).toBe(1.5);
+    expect(roundToHalfKg(1.2)).toBe(1);
+  });
+
+  it('ne renvoie jamais une valeur négative', () => {
+    expect(roundToHalfKg(-2)).toBe(0);
+  });
+
+  it('kgToQuantity500g convertit en entier (unité stockée en base)', () => {
+    expect(kgToQuantity500g(1.5)).toBe(3);
+    expect(kgToQuantity500g(0)).toBe(0);
+    expect(Number.isInteger(kgToQuantity500g(2.5))).toBe(true);
+  });
+});
+
+describe('ordersData.buildEditItemsPayload', () => {
+  it('convertit les kg par produit en quantity_500g, dans l\'ordre de PRODUCT_COLUMNS', () => {
+    const payload = buildEditItemsPayload({ noir: 2, blanc: 1.5, blanc_morue: 0 });
+    expect(payload).toEqual([
+      { product_id: 'noir', quantity_500g: 4 },
+      { product_id: 'blanc', quantity_500g: 3 },
+    ]);
+  });
+
+  it('omet les produits à quantité 0 ou absente', () => {
+    expect(buildEditItemsPayload({})).toEqual([]);
+    expect(buildEditItemsPayload({ noir: 0 })).toEqual([]);
   });
 });
