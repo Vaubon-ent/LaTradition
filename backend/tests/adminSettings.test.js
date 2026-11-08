@@ -83,20 +83,51 @@ describe('PUT /api/admin/settings', () => {
     expect(res.status).toBe(400);
   });
 
-  it('modifie pickup_address et contact_phone et les répercute sur la route publique', async () => {
+  it('modifie pickup_address, pickup_time et contact_phone et les répercute sur la route publique', async () => {
     const built = buildTestApp();
     db = built.db;
     const agent = await loginAgent(built.app);
 
     const putRes = await agent.put('/api/admin/settings').send({
       pickup_address: '12 rue de la Tradition, 12345 Boudinville',
+      pickup_time: 'à partir de 16h',
       contact_phone: '06 11 22 33 44',
     });
     expect(putRes.status).toBe(200);
 
     const publicRes = await request(built.app).get('/api/settings/public');
     expect(publicRes.body.pickup_address).toBe('12 rue de la Tradition, 12345 Boudinville');
+    expect(publicRes.body.pickup_time).toBe('à partir de 16h');
     expect(publicRes.body.contact_phone).toBe('06 11 22 33 44');
+  });
+
+  it('rattache pickup_address/pickup_time à la nouvelle saison quand les deux sont modifiées dans la même requête', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+
+    const putRes = await agent.put('/api/admin/settings').send({
+      season: '2027',
+      pickup_address: 'Nouvelle adresse 2027',
+      pickup_time: 'à partir de 18h',
+    });
+    expect(putRes.status).toBe(200);
+
+    const campaign2027 = db.prepare('SELECT * FROM campaigns WHERE season = ?').get('2027');
+    expect(campaign2027.pickup_address).toBe('Nouvelle adresse 2027');
+    expect(campaign2027.pickup_time).toBe('à partir de 18h');
+
+    // La campagne 2026 (seed de test) n'est jamais modifiée par cet appel.
+    const campaign2026 = db.prepare('SELECT * FROM campaigns WHERE season = ?').get('2026');
+    expect(campaign2026).toBeUndefined();
+  });
+
+  it('rejette pickup_address/pickup_time si aucune season n’est encore configurée', async () => {
+    const built = buildTestApp({ withSeed: false });
+    db = built.db;
+    const agent = await loginAgent(built.app);
+    const res = await agent.put('/api/admin/settings').send({ pickup_address: 'Adresse sans saison' });
+    expect(res.status).toBe(400);
   });
 
   it('rejette pickup_address si ce n’est pas une chaîne', async () => {
@@ -104,6 +135,14 @@ describe('PUT /api/admin/settings', () => {
     db = built.db;
     const agent = await loginAgent(built.app);
     const res = await agent.put('/api/admin/settings').send({ pickup_address: 42 });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejette pickup_time si ce n’est pas une chaîne', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+    const res = await agent.put('/api/admin/settings').send({ pickup_time: 42 });
     expect(res.status).toBe(400);
   });
 

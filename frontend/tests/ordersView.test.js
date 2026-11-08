@@ -15,6 +15,7 @@ function makeOrder(overrides = {}) {
     first_name: 'Jeanne',
     last_name: 'Dupont',
     phone: '0612345678',
+    total_cents: 1000,
     items: [{ product_id: 'noir', quantity_500g: 2 }],
     ...overrides,
   };
@@ -60,6 +61,53 @@ describe('ordersView — montage initial', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].textContent).toContain('Dupont');
     expect(rows[0].textContent).toContain('Jeanne');
+  });
+
+  it('affiche le montant de la commande dans une colonne dédiée', async () => {
+    mockFetch({ orders: [makeOrder({ total_cents: 4250 })] });
+    const root = getContainer();
+    await mount(root);
+
+    const rows = root.querySelectorAll('tbody tr');
+    expect(rows[0].textContent).toContain('42,50');
+  });
+});
+
+describe('ordersView — totaux', () => {
+  it('affiche nombre de commandes, montant total et kg par produit (+ global) sur les commandes visibles', async () => {
+    mockFetch({
+      orders: [
+        makeOrder({ id: 1, last_name: 'Dupont', total_cents: 1000, items: [{ product_id: 'noir', quantity_500g: 2 }] }),
+        makeOrder({ id: 2, last_name: 'Martin', total_cents: 2500, items: [{ product_id: 'blanc', quantity_500g: 1 }] }),
+      ],
+    });
+    const root = getContainer();
+    await mount(root);
+
+    const summary = root.querySelector('[data-role="orders-summary"]');
+    expect(summary.textContent).toContain('2');
+    expect(summary.textContent).toContain('35,00');
+    expect(summary.textContent).toContain('1');
+    expect(summary.textContent).toContain('0,5');
+  });
+
+  it('les totaux se recalculent sur les commandes filtrées (pas toute la saison)', async () => {
+    mockFetch({
+      orders: [
+        makeOrder({ id: 1, last_name: 'Dupont', total_cents: 1000 }),
+        makeOrder({ id: 2, last_name: 'Martin', total_cents: 2500 }),
+      ],
+    });
+    const root = getContainer();
+    await mount(root);
+
+    const filterInput = root.querySelector('[data-filter="last_name"]');
+    filterInput.value = 'dup';
+    filterInput.dispatchEvent(new Event('input', { bubbles: true }));
+
+    const summary = root.querySelector('[data-role="orders-summary"]');
+    expect(summary.textContent).toContain('10,00');
+    expect(summary.textContent).not.toContain('35,00');
   });
 });
 

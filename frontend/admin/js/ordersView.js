@@ -12,8 +12,10 @@ import {
   statusAfterPickedUpToggle,
   formatDate,
   formatKg,
+  formatEuros,
   matchesFilters,
   sortOrders,
+  computeTotals,
 } from './ordersData.js';
 import { mount as mountOrderEditModal } from './orderEditModal.js';
 
@@ -23,6 +25,7 @@ const SORTABLE_COLUMNS = [
   { key: 'first_name', label: 'Prénom' },
   { key: 'phone', label: 'Tél.' },
   ...PRODUCT_COLUMNS.map((c) => ({ key: c.id, label: `${c.label} (kg)` })),
+  { key: 'total_cents', label: 'Montant (€)' },
   { key: 'created_at', label: 'Date de commande' },
   { key: 'paid', label: 'Payé' },
   { key: 'pickedUp', label: 'Récupéré' },
@@ -60,6 +63,7 @@ function mount(root) {
       <button type="button" data-role="close-campaign">Clôturer la campagne</button>
       <button type="button" data-role="new-campaign">Nouvelle campagne</button>
     </div>
+    <div class="orders-summary" data-role="orders-summary"></div>
     <table class="orders-table">
       <thead>
         <tr>
@@ -67,6 +71,7 @@ function mount(root) {
           <th>${sortableHeader(SORTABLE_COLUMNS[1])}</th>
           <th>${sortableHeader(SORTABLE_COLUMNS[2])}</th>
           ${PRODUCT_COLUMNS.map((c) => `<th>${sortableHeader({ key: c.id, label: `${c.label} (kg)` })}</th>`).join('')}
+          <th>${sortableHeader({ key: 'total_cents', label: 'Montant (€)' })}</th>
           <th>${sortableHeader({ key: 'created_at', label: 'Date de commande' })}</th>
           <th class="col-paid">${sortableHeader({ key: 'paid', label: 'Payé' })}</th>
           <th class="col-pickedup">${sortableHeader({ key: 'pickedUp', label: 'Récupéré' })}</th>
@@ -79,6 +84,7 @@ function mount(root) {
           ${PRODUCT_COLUMNS.map(
             (c) => `<th><input type="text" data-filter-kg="${c.id}" aria-label="Filtrer par kg ${c.label}" /></th>`
           ).join('')}
+          <th></th>
           <th><input type="text" data-filter="created_at" aria-label="Filtrer par date" /></th>
           <th class="col-paid">
             <select data-filter="paid" aria-label="Filtrer par payé">
@@ -102,8 +108,22 @@ function mount(root) {
   `;
 
   const messageEl = root.querySelector('[data-role="orders-message"]');
+  const summaryEl = root.querySelector('[data-role="orders-summary"]');
   const tbody = root.querySelector('[data-role="orders-tbody"]');
   const thead = root.querySelector('thead');
+
+  // Totaux des commandes affichées (filtrées), pas forcément de toute la
+  // saison — pour que filtrer (ex. "non payé") donne aussi des sous-totaux
+  // utiles (demande utilisateur du 2026-11-08).
+  function renderSummary(visible) {
+    const totals = computeTotals(visible);
+    summaryEl.innerHTML = `
+      <strong>${totals.count}</strong> commande${totals.count === 1 ? '' : 's'}
+      · Montant total : <strong>${formatEuros(totals.amountCents)} €</strong>
+      ${PRODUCT_COLUMNS.map((c) => `· ${c.label} : <strong>${formatKg(totals.kgByProduct[c.id])} kg</strong>`).join(' ')}
+      · Total (tous types) : <strong>${formatKg(totals.kgTotal)} kg</strong>
+    `;
+  }
 
   function showMessage(text, isError = false) {
     messageEl.hidden = !text;
@@ -119,6 +139,7 @@ function mount(root) {
 
   function renderRows() {
     const visible = sortOrders(orders.filter((order) => matchesFilters(order, filters)), sort);
+    renderSummary(visible);
     tbody.innerHTML = visible
       .map((order) => {
         const paid = isPaid(order.status);
@@ -129,6 +150,7 @@ function mount(root) {
         <td>${order.first_name}</td>
         <td>${order.phone}</td>
         ${PRODUCT_COLUMNS.map((c) => `<td>${formatKg(kgForProduct(order, c.id))}</td>`).join('')}
+        <td>${formatEuros(order.total_cents)} €</td>
         <td>${formatDate(order.created_at)}</td>
         <td>
           <input type="checkbox" data-role="paid-checkbox" data-order-id="${order.id}" ${paid ? 'checked' : ''} ${pickedUp ? 'disabled' : ''} />

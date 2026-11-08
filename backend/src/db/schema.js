@@ -14,6 +14,16 @@ CREATE TABLE IF NOT EXISTS settings (
   value TEXT NOT NULL
 );
 
+-- Infos propres à une campagne (saison) donnée, par opposition à settings
+-- qui est un singleton global : adresse et horaire de retrait peuvent
+-- changer d'une saison à l'autre, donc indexés par season plutôt
+-- qu'écrasés sans historique (.ai/decisions.md).
+CREATE TABLE IF NOT EXISTS campaigns (
+  season TEXT PRIMARY KEY,
+  pickup_address TEXT NOT NULL DEFAULT '',
+  pickup_time TEXT NOT NULL DEFAULT ''
+);
+
 CREATE TABLE IF NOT EXISTS customers (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   first_name TEXT NOT NULL,

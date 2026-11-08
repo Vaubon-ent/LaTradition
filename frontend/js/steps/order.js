@@ -6,12 +6,18 @@ import {
   hasAnyQuantity,
   setProducts,
   setPublicSettings,
+  roundToStep,
+  QUANTITY_STEP_KG,
 } from '../state.js';
 
 // Incrément par défaut des boutons +/- : 1 kg (l'unité la plus courante).
 // Le champ central reste un input libre pour les clients qui veulent
 // commander par 500g (pas de 0,5 kg, jamais 100g — state.roundToStep).
 const BUTTON_STEP_KG = 1;
+
+// Plage affichée dans la roulette de sélection (au-delà, la saisie directe au
+// clavier dans le champ reste toujours possible — jamais désactivée).
+const WHEEL_MAX_KG = 20;
 
 function escapeHtml(value) {
   const div = document.createElement('div');
@@ -21,6 +27,32 @@ function escapeHtml(value) {
 
 function formatEuros(cents) {
   return (cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function formatKgLabel(value) {
+  return value % 1 === 0 ? String(value) : String(value).replace('.', ',');
+}
+
+function buildWheelValues() {
+  const values = [];
+  for (let v = 0; v <= WHEEL_MAX_KG; v += QUANTITY_STEP_KG) {
+    values.push(Math.round(v * 1000) / 1000);
+  }
+  return values;
+}
+
+// Met en évidence la valeur centrée dans la roulette et y fait défiler —
+// purement visuel. Seul un clic sur une valeur ou une saisie directe dans le
+// champ (déjà géré par le listener "change" existant) modifie la quantité.
+function syncWheel(wheelEl, qty) {
+  const target = Math.max(0, Math.min(WHEEL_MAX_KG, roundToStep(qty)));
+  for (const li of wheelEl.children) {
+    const match = Number(li.dataset.value) === target;
+    li.classList.toggle('selected', match);
+    if (match) {
+      wheelEl.scrollTop = li.offsetTop - wheelEl.clientHeight / 2 + li.offsetHeight / 2;
+    }
+  }
 }
 
 function init(container, ctx) {
@@ -56,6 +88,7 @@ function render(container, state, ctx) {
   const productsEl = container.querySelector('[data-role="products"]');
   if (productsEl.childElementCount !== state.products.length) {
     productsEl.innerHTML = '';
+    const wheelValues = buildWheelValues();
     for (const product of state.products) {
       const card = document.createElement('div');
       card.className = 'product-card';
@@ -65,11 +98,51 @@ function render(container, state, ctx) {
         <p class="price">${formatEuros(product.price_per_kg)} €/kg</p>
         <div class="stepper">
           <button type="button" data-role="dec" aria-label="Diminuer la quantité">−</button>
-          <input type="number" data-role="qty" min="0" step="0.5" value="0" aria-label="Quantité en kg" />
+          <div class="qty-wrap" data-role="qty-wrap">
+            <input type="number" data-role="qty" min="0" step="0.5" value="0" aria-label="Quantité en kg" autocomplete="off" />
+            <ul class="qty-wheel" data-role="wheel" hidden></ul>
+          </div>
           <span class="unit">kg</span>
           <button type="button" data-role="inc" aria-label="Augmenter la quantité">+</button>
         </div>
       `;
+      const wrap = card.querySelector('[data-role="qty-wrap"]');
+      const qtyInput = card.querySelector('[data-role="qty"]');
+      const wheelEl = card.querySelector('[data-role="wheel"]');
+
+      for (const value of wheelValues) {
+        const li = document.createElement('li');
+        li.dataset.value = String(value);
+        li.textContent = formatKgLabel(value);
+        wheelEl.appendChild(li);
+      }
+
+      const openWheel = () => {
+        syncWheel(wheelEl, Number(qtyInput.value) || 0);
+        wheelEl.hidden = false;
+      };
+      qtyInput.addEventListener('focus', openWheel);
+      qtyInput.addEventListener('click', openWheel);
+
+      // Roulette numérique façon sélecteur mobile (date de naissance, etc.) :
+      // affichée au clic/focus sur le champ ; un clic sur une valeur déclenche
+      // la même mise à jour que la saisie au clavier, qui reste toujours
+      // possible (le champ n'est jamais désactivé pendant que la roulette est
+      // ouverte — pas le seul moyen de choisir une quantité).
+      wheelEl.addEventListener('click', (event) => {
+        const li = event.target.closest('li[data-value]');
+        if (!li) return;
+        qtyInput.value = li.dataset.value;
+        qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+        wheelEl.hidden = true;
+      });
+
+      document.addEventListener('click', (event) => {
+        if (!wheelEl.hidden && !wrap.contains(event.target)) {
+          wheelEl.hidden = true;
+        }
+      });
+
       card.querySelector('[data-role="dec"]').addEventListener('click', () => {
         ctx.update((s) => decrementProductQuantity(s, product.id, BUTTON_STEP_KG));
       });
@@ -78,7 +151,7 @@ function render(container, state, ctx) {
       });
       // "change" (pas "input") : on laisse le client finir de taper (ex. "0,5"
       // ou "1.5" pour 500g/1,5 kg) avant d'arrondir au pas de 0,5 kg.
-      card.querySelector('[data-role="qty"]').addEventListener('change', (event) => {
+      qtyInput.addEventListener('change', (event) => {
         const parsed = Number(event.target.value.replace(',', '.'));
         ctx.update((s) => setProductQuantity(s, product.id, Number.isFinite(parsed) ? parsed : 0));
       });
@@ -96,6 +169,10 @@ function render(container, state, ctx) {
       qtyInput.value = qty;
     }
     card.querySelector('[data-role="dec"]').disabled = qty <= 0;
+    const wheelEl = card.querySelector('[data-role="wheel"]');
+    if (!wheelEl.hidden) {
+      syncWheel(wheelEl, qty);
+    }
   }
 
   container.querySelector('[data-role="next"]').disabled = !hasAnyQuantity(state);

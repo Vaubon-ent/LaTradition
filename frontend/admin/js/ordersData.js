@@ -55,6 +55,13 @@ function formatKg(kg) {
   return kg.toLocaleString('fr-FR');
 }
 
+// Réimplémenté ici en local (pas d'import depuis frontend/js/) : les deux
+// bundles front (client vs admin) restent volontairement indépendants, même
+// convention que roundToHalfKg/kgToQuantity500g ci-dessous.
+function formatEuros(cents) {
+  return (cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 function includesFilter(value, filterText) {
   if (!filterText) return true;
   return String(value).toLowerCase().includes(filterText.toLowerCase());
@@ -89,6 +96,7 @@ const SORT_ACCESSORS = {
   last_name: (order) => order.last_name.toLowerCase(),
   first_name: (order) => order.first_name.toLowerCase(),
   phone: (order) => order.phone,
+  total_cents: (order) => order.total_cents,
   created_at: (order) => order.created_at,
   paid: (order) => (isPaid(order.status) ? 1 : 0),
   pickedUp: (order) => (isPickedUp(order.status) ? 1 : 0),
@@ -138,6 +146,23 @@ function buildEditItemsPayload(quantitiesByProduct) {
   })).filter((item) => item.quantity_500g > 0);
 }
 
+// Totaux affichés au-dessus du tableau (demande utilisateur du 2026-11-08) :
+// calculés sur les commandes passées en argument (le tableau filtré/visible,
+// pas forcément toute la saison), pour que filtrer donne aussi des
+// sous-totaux utiles — pas seulement les lignes.
+function computeTotals(orders) {
+  const kgByProduct = PRODUCT_COLUMNS.reduce((acc, c) => ({ ...acc, [c.id]: 0 }), {});
+  let amountCents = 0;
+  for (const order of orders) {
+    amountCents += order.total_cents;
+    for (const { id } of PRODUCT_COLUMNS) {
+      kgByProduct[id] += kgForProduct(order, id);
+    }
+  }
+  const kgTotal = Object.values(kgByProduct).reduce((sum, kg) => sum + kg, 0);
+  return { count: orders.length, amountCents, kgByProduct, kgTotal };
+}
+
 export {
   PRODUCT_COLUMNS,
   kgForProduct,
@@ -147,9 +172,11 @@ export {
   statusAfterPickedUpToggle,
   formatDate,
   formatKg,
+  formatEuros,
   matchesFilters,
   sortOrders,
   roundToHalfKg,
   kgToQuantity500g,
   buildEditItemsPayload,
+  computeTotals,
 };

@@ -149,6 +149,59 @@ describe('étape Commande — quantités (F3)', () => {
     await flush();
     expect(qtyInput.value).toBe('0.5');
   });
+
+  it('affiche la roulette de valeurs au clic/focus dans le champ', async () => {
+    mockFetchDefault();
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+
+    const qtyInput = document.querySelector('#step-2 [data-role="qty"]');
+    const wheel = document.querySelector('#step-2 [data-role="wheel"]');
+    expect(wheel.hidden).toBe(true);
+
+    qtyInput.focus();
+    expect(wheel.hidden).toBe(false);
+    expect(wheel.querySelectorAll('li').length).toBeGreaterThan(0);
+  });
+
+  it('un clic sur une valeur de la roulette met à jour la quantité et referme la roulette', async () => {
+    mockFetchDefault();
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+
+    const qtyInput = document.querySelector('#step-2 [data-role="qty"]');
+    const wheel = document.querySelector('#step-2 [data-role="wheel"]');
+    qtyInput.focus();
+
+    const target = wheel.querySelector('li[data-value="2"]');
+    target.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    expect(qtyInput.value).toBe('2');
+    expect(wheel.hidden).toBe(true);
+  });
+
+  it('referme la roulette sur un clic en dehors du champ', async () => {
+    mockFetchDefault();
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+
+    const qtyInput = document.querySelector('#step-2 [data-role="qty"]');
+    const wheel = document.querySelector('#step-2 [data-role="wheel"]');
+    qtyInput.focus();
+    expect(wheel.hidden).toBe(false);
+
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flush();
+
+    expect(wheel.hidden).toBe(true);
+  });
 });
 
 describe('étape PII — check-phone (F4)', () => {

@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import request from 'supertest';
 import { buildTestApp } from './helpers/testApp.js';
 import { setSetting } from '../src/db/settingsRepo.js';
+import { upsertCampaign } from '../src/db/campaignsRepo.js';
 
 describe('GET /api/settings/public', () => {
   let db;
@@ -43,26 +44,43 @@ describe('GET /api/settings/public', () => {
     expect(res.body.news).toBe('Les prix augmentent cette année, commandez vite !');
   });
 
-  it('renvoie une chaîne vide pour pickup_address et contact_phone tant qu’ils ne sont pas configurés', async () => {
+  it('renvoie une chaîne vide pour pickup_address, pickup_time et contact_phone tant qu’ils ne sont pas configurés', async () => {
     const built = buildTestApp();
     db = built.db;
 
     const res = await request(built.app).get('/api/settings/public');
 
     expect(res.body.pickup_address).toBe('');
+    expect(res.body.pickup_time).toBe('');
     expect(res.body.contact_phone).toBe('');
   });
 
-  it('renvoie pickup_address et contact_phone une fois configurés', async () => {
+  it('renvoie pickup_address/pickup_time (campagne de la saison courante) et contact_phone une fois configurés', async () => {
     const built = buildTestApp();
     db = built.db;
-    setSetting(db, 'pickup_address', '12 rue de la Tradition, 12345 Boudinville');
+    // Saison courante = '2026' (seed de test, voir db/seed.js).
+    upsertCampaign(db, '2026', {
+      pickup_address: '12 rue de la Tradition, 12345 Boudinville',
+      pickup_time: 'à partir de 16h',
+    });
     setSetting(db, 'contact_phone', '06 11 22 33 44');
 
     const res = await request(built.app).get('/api/settings/public');
 
     expect(res.body.pickup_address).toBe('12 rue de la Tradition, 12345 Boudinville');
+    expect(res.body.pickup_time).toBe('à partir de 16h');
     expect(res.body.contact_phone).toBe('06 11 22 33 44');
+  });
+
+  it('ne renvoie jamais la campagne d’une autre saison', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    upsertCampaign(db, '2025', { pickup_address: 'Ancienne adresse', pickup_time: 'Ancien horaire' });
+
+    const res = await request(built.app).get('/api/settings/public');
+
+    expect(res.body.pickup_address).toBe('');
+    expect(res.body.pickup_time).toBe('');
   });
 
   it('renvoie locked: true quand la date limite est déjà passée', async () => {

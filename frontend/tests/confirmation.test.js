@@ -9,7 +9,7 @@ describe('formatDateLong', () => {
 });
 
 describe('confirmation — informations pratiques', () => {
-  it("affiche l'adresse de retrait et le contact quand ils sont configurés", () => {
+  it("affiche l'adresse de retrait, l'heure de retrait et le contact quand ils sont configurés", () => {
     const container = document.createElement('div');
     init(container);
     let state = setOrderResult(createInitialState(), { total_cents: 1000, conception_date: '2026-12-13' });
@@ -20,6 +20,7 @@ describe('confirmation — informations pratiques', () => {
       nonce: 'n',
       news: '',
       pickup_address: '12 rue de la Tradition, 12345 Boudinville',
+      pickup_time: 'à partir de 16h',
       contact_phone: '06 11 22 33 44',
     });
 
@@ -27,11 +28,13 @@ describe('confirmation — informations pratiques', () => {
 
     expect(container.querySelector('[data-role="address"]').hidden).toBe(false);
     expect(container.querySelector('[data-role="address"]').textContent).toContain('12 rue de la Tradition');
+    expect(container.querySelector('[data-role="pickup-time"]').hidden).toBe(false);
+    expect(container.querySelector('[data-role="pickup-time"]').textContent).toContain('à partir de 16h');
     expect(container.querySelector('[data-role="contact"]').hidden).toBe(false);
     expect(container.querySelector('[data-role="contact"]').textContent).toContain('06 11 22 33 44');
   });
 
-  it('masque adresse et contact quand ils ne sont pas configurés', () => {
+  it('masque adresse, heure de retrait et contact quand ils ne sont pas configurés', () => {
     const container = document.createElement('div');
     init(container);
     const state = setOrderResult(createInitialState(), { total_cents: 1000, conception_date: '2026-12-13' });
@@ -39,6 +42,7 @@ describe('confirmation — informations pratiques', () => {
     render(container, state);
 
     expect(container.querySelector('[data-role="address"]').hidden).toBe(true);
+    expect(container.querySelector('[data-role="pickup-time"]').hidden).toBe(true);
     expect(container.querySelector('[data-role="contact"]').hidden).toBe(true);
   });
 });

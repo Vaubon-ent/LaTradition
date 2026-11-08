@@ -67,6 +67,18 @@ section {
   margin-bottom: 12px;
 }
 
+.orders-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
 .orders-table {
   width: 100%;
   border-collapse: collapse;

@@ -4,6 +4,7 @@ function init(container) {
     <p data-role="total"></p>
     <p data-role="deadline"></p>
     <p data-role="address" hidden></p>
+    <p data-role="pickup-time" hidden></p>
     <p data-role="contact" hidden></p>
     <p class="muted">Paiement en ligne : disponible prochainement.</p>
   `;
@@ -42,6 +43,13 @@ function render(container, state) {
   addressEl.hidden = !hasAddress;
   if (hasAddress) {
     addressEl.textContent = `Adresse de retrait : ${state.pickup_address}`;
+  }
+
+  const pickupTimeEl = container.querySelector('[data-role="pickup-time"]');
+  const hasPickupTime = typeof state.pickup_time === 'string' && state.pickup_time.trim().length > 0;
+  pickupTimeEl.hidden = !hasPickupTime;
+  if (hasPickupTime) {
+    pickupTimeEl.textContent = `Heure de retrait : ${state.pickup_time}`;
   }
 
   const contactEl = container.querySelector('[data-role="contact"]');

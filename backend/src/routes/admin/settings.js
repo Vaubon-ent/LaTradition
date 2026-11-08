@@ -1,18 +1,20 @@
 const express = require('express');
-const { setSetting } = require('../../db/settingsRepo');
+const { setSetting, getSetting } = require('../../db/settingsRepo');
+const { upsertCampaign } = require('../../db/campaignsRepo');
 const { parseConceptionDate } = require('../../services/dates');
 
 function createAdminSettingsRouter({ db }) {
   const router = express.Router();
 
   router.put('/', (req, res) => {
-    const { conception_date, season, news, pickup_address, contact_phone } = req.body || {};
+    const { conception_date, season, news, pickup_address, pickup_time, contact_phone } = req.body || {};
 
     if (
       conception_date === undefined &&
       season === undefined &&
       news === undefined &&
       pickup_address === undefined &&
+      pickup_time === undefined &&
       contact_phone === undefined
     ) {
       return res.status(400).json({ error: 'Aucun paramètre à modifier.' });
@@ -41,11 +43,21 @@ function createAdminSettingsRouter({ db }) {
       setSetting(db, 'news', news);
     }
 
-    if (pickup_address !== undefined) {
-      if (typeof pickup_address !== 'string') {
+    if (pickup_address !== undefined || pickup_time !== undefined) {
+      if (pickup_address !== undefined && typeof pickup_address !== 'string') {
         return res.status(400).json({ error: 'pickup_address doit être une chaîne (vide autorisée).' });
       }
-      setSetting(db, 'pickup_address', pickup_address);
+      if (pickup_time !== undefined && typeof pickup_time !== 'string') {
+        return res.status(400).json({ error: 'pickup_time doit être une chaîne (vide autorisée).' });
+      }
+      // pickup_address/pickup_time sont propres à une campagne (saison), pas
+      // au singleton `settings` (.ai/decisions.md) : rattachées à la saison
+      // fournie dans cette même requête, sinon à la saison déjà configurée.
+      const targetSeason = season !== undefined ? season : getSetting(db, 'season');
+      if (!targetSeason) {
+        return res.status(400).json({ error: 'season doit être configurée avant pickup_address/pickup_time.' });
+      }
+      upsertCampaign(db, targetSeason, { pickup_address, pickup_time });
     }
 
     if (contact_phone !== undefined) {

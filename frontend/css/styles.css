@@ -147,6 +147,46 @@ button.primary {
   color: #6b5a44;
 }
 
+.qty-wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.qty-wheel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  width: 100px;
+  max-height: 150px;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+  list-style: none;
+}
+
+.qty-wheel[hidden] {
+  display: none;
+}
+
+.qty-wheel li {
+  scroll-snap-align: center;
+  padding: 6px 0;
+  text-align: center;
+  cursor: pointer;
+}
+
+.qty-wheel li.selected {
+  background: var(--color-warning-bg);
+  font-weight: 600;
+}
+
 .muted {
   color: #7a6a55;
 }

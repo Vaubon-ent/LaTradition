@@ -8,6 +8,7 @@ function createInitialState() {
     nonce: null,
     news: '',
     pickup_address: '',
+    pickup_time: '',
     contact_phone: '',
     conceptionDate: null,
     orderDeadline: null,
@@ -79,7 +80,7 @@ function setProducts(state, products) {
 
 function setPublicSettings(
   state,
-  { conceptionDate, orderDeadline, locked, nonce, news, pickup_address, contact_phone }
+  { conceptionDate, orderDeadline, locked, nonce, news, pickup_address, pickup_time, contact_phone }
 ) {
   return {
     ...state,
@@ -89,6 +90,7 @@ function setPublicSettings(
     nonce,
     news,
     pickup_address,
+    pickup_time,
     contact_phone,
   };
 }

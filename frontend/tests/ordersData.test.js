@@ -8,11 +8,13 @@ import {
   statusAfterPickedUpToggle,
   formatDate,
   formatKg,
+  formatEuros,
   matchesFilters,
   sortOrders,
   roundToHalfKg,
   kgToQuantity500g,
   buildEditItemsPayload,
+  computeTotals,
 } from '../admin/js/ordersData.js';
 
 function makeOrder(overrides = {}) {
@@ -24,6 +26,7 @@ function makeOrder(overrides = {}) {
     first_name: 'Jeanne',
     last_name: 'Dupont',
     phone: '0612345678',
+    total_cents: 1000,
     items: [],
     ...overrides,
   };
@@ -105,6 +108,10 @@ describe('ordersData.formatDate / formatKg', () => {
   it('formatKg utilise la notation française (virgule)', () => {
     expect(formatKg(1.5)).toBe('1,5');
   });
+  it('formatEuros convertit les centimes en euros avec 2 décimales', () => {
+    expect(formatEuros(4250)).toBe('42,50');
+    expect(formatEuros(0)).toBe('0,00');
+  });
 });
 
 describe('ordersData.matchesFilters', () => {
@@ -179,6 +186,14 @@ describe('ordersData.sortOrders', () => {
     expect(sortOrders([a, b, c], { column: 'noir', direction: 'desc' }).map((o) => o.id)).toEqual([1, 3, 2]);
   });
 
+  it('tri croissant/décroissant sur le montant (total_cents)', () => {
+    const cheap = makeOrder({ id: 1, total_cents: 1000 });
+    const mid = makeOrder({ id: 2, total_cents: 2000 });
+    const expensive = makeOrder({ id: 3, total_cents: 3000 });
+    expect(sortOrders([expensive, cheap, mid], { column: 'total_cents', direction: 'asc' }).map((o) => o.id)).toEqual([1, 2, 3]);
+    expect(sortOrders([expensive, cheap, mid], { column: 'total_cents', direction: 'desc' }).map((o) => o.id)).toEqual([3, 2, 1]);
+  });
+
   it('tri sur payé/récupéré (booléen dérivé du statut, non-payé/non-récupéré avant)', () => {
     const recue = makeOrder({ id: 1, status: 'recue' });
     const payee = makeOrder({ id: 2, status: 'payee' });
@@ -225,5 +240,28 @@ describe('ordersData.buildEditItemsPayload', () => {
   it('omet les produits à quantité 0 ou absente', () => {
     expect(buildEditItemsPayload({})).toEqual([]);
     expect(buildEditItemsPayload({ noir: 0 })).toEqual([]);
+  });
+});
+
+describe('ordersData.computeTotals', () => {
+  it('additionne nombre de commandes, montant et kg par produit (+ total global)', () => {
+    const orders = [
+      makeOrder({ id: 1, total_cents: 1000, items: [{ product_id: 'noir', quantity_500g: 2 }] }),
+      makeOrder({ id: 2, total_cents: 2500, items: [{ product_id: 'blanc', quantity_500g: 1 }, { product_id: 'noir', quantity_500g: 1 }] }),
+    ];
+    const totals = computeTotals(orders);
+    expect(totals.count).toBe(2);
+    expect(totals.amountCents).toBe(3500);
+    expect(totals.kgByProduct).toEqual({ noir: 1.5, blanc: 0.5, blanc_morue: 0 });
+    expect(totals.kgTotal).toBe(2);
+  });
+
+  it('renvoie des totaux à zéro pour une liste vide', () => {
+    expect(computeTotals([])).toEqual({
+      count: 0,
+      amountCents: 0,
+      kgByProduct: { noir: 0, blanc: 0, blanc_morue: 0 },
+      kgTotal: 0,
+    });
   });
 });
