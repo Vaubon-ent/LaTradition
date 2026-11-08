@@ -1,0 +1,83 @@
+:root {
+  color-scheme: light;
+  --color-bg: #faf6f0;
+  --color-text: #2a2016;
+  --color-primary: #8c2f1b;
+  --color-primary-text: #ffffff;
+  --color-border: #d8c9b4;
+  --color-error-bg: #fdeceb;
+  --color-error-text: #8c2f1b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+#admin-app {
+  width: 100%;
+  max-width: 400px;
+}
+
+section {
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+}
+
+label {
+  display: block;
+  margin-bottom: 12px;
+  font-weight: 500;
+}
+
+input[type='password'] {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 10px;
+  font-size: 1rem;
+  text-align: center;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+}
+
+button {
+  font-size: 1rem;
+  padding: 10px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: #fff;
+  cursor: pointer;
+}
+
+button.primary {
+  background: var(--color-primary);
+  color: var(--color-primary-text);
+  border-color: var(--color-primary);
+}
+
+.error {
+  background: var(--color-error-bg);
+  color: var(--color-error-text);
+  padding: 10px;
+  border-radius: 6px;
+  margin-top: 12px;
+}
+
+.muted {
+  color: #7a6a55;
+}

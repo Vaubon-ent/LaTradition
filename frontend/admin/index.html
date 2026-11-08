@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Administration — LaTradition</title>
+  <link rel="stylesheet" href="/admin/css/admin.css" />
+</head>
+<body>
+  <div id="admin-app">
+    <section id="view-loading" data-view="loading">
+      <p>Chargement…</p>
+    </section>
+
+    <section id="view-login" data-view="login" hidden>
+      <h2>Connexion administrateur</h2>
+      <form data-role="login-form">
+        <label>
+          Mot de passe
+          <input type="password" name="password" required />
+        </label>
+        <button type="submit" class="primary">Se connecter</button>
+      </form>
+      <p data-role="login-error" class="error" hidden></p>
+    </section>
+
+    <section id="view-dashboard" data-view="dashboard" hidden>
+      <h2>Tableau de bord</h2>
+      <p class="muted">À venir.</p>
+      <button type="button" data-role="logout">Se déconnecter</button>
+    </section>
+  </div>
+  <script type="module" src="/admin/js/adminApp.js"></script>
+</body>
+</html>

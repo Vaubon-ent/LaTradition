@@ -12,6 +12,7 @@ const { createAdminExportRouter } = require('./routes/admin/export');
 const { createAdminProductsRouter } = require('./routes/admin/products');
 const { createAdminSettingsRouter } = require('./routes/admin/settings');
 const { createAdminCustomersRouter } = require('./routes/admin/customers');
+const { createAdminSessionRouter } = require('./routes/admin/session');
 const { requireAdminAuth } = require('./middleware/requireAdminAuth');
 const { createCorsGuard } = require('./middleware/corsGuard');
 const { errorHandler } = require('./middleware/errorHandler');
@@ -53,6 +54,7 @@ function createApp({
   const adminConfig = { db, adminPasswordHash, adminJwtSecret, adminTokenTtlSeconds, adminMaxLoginAttempts, adminLockDurationMs };
   app.use('/api/admin', createAdminAuthRouter(adminConfig));
   app.use('/api/admin', requireAdminAuth(adminJwtSecret));
+  app.use('/api/admin', createAdminSessionRouter());
   app.use('/api/admin/orders', createAdminOrdersRouter({ db }));
   app.use('/api/admin/production', createAdminProductionRouter({ db }));
   app.use('/api/admin', createAdminExportRouter({ db }));
