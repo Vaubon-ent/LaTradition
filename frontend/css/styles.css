@@ -39,18 +39,6 @@ header {
   margin-bottom: 16px;
 }
 
-/* Visible uniquement à l'étape 5 (retour utilisateur du 2026-11-09) : avant
-   cette étape, le bouton "Précédent" de chaque étape couvre déjà le besoin de
-   navigation arrière. Positionné sous la carte, même style que "Commander". */
-#restart {
-  display: block;
-  margin: 20px auto 0;
-}
-
-#restart[hidden] {
-  display: none;
-}
-
 .step[hidden] {
   display: none;
 }

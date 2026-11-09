@@ -15,7 +15,6 @@ function setupDom() {
         <section id="step-4" class="step"></section>
         <section id="step-5" class="step"></section>
       </main>
-      <button type="button" id="restart" hidden>Recommencer</button>
     </div>
   `;
 }
@@ -330,115 +329,6 @@ describe('carte Récapitulatif — estimation façon ticket de caisse (M-FR2)', 
     expect(recap.querySelector('[data-role="total"]').textContent).toContain('10,00');
 
     expect(recap.querySelector('[data-role="note"]').textContent).toContain('définitif');
-  });
-});
-
-describe('bouton Recommencer (M-FR5)', () => {
-  async function reachConfirmation() {
-    await goToPii();
-    const form = document.querySelector('#step-3 [data-role="form"]');
-    fireInput(form.elements.first_name, 'Jean');
-    fireInput(form.elements.last_name, 'Dupont');
-    fireInput(form.elements.phone, '0612345678');
-    document.querySelector('#step-3 [data-role="next"]').click();
-    await flush();
-    await flush();
-    document.querySelector('#step-4 [data-role="submit"]').click();
-    await flush();
-    await flush();
-  }
-
-  it("reste masqué aux étapes 1 à 4 (le bouton Précédent de chaque étape couvre déjà le retour en arrière)", async () => {
-    mockFetchDefault();
-    await loadApp();
-    expect(document.getElementById('restart').hidden).toBe(true);
-
-    document.querySelector('#step-1 [data-role="start"]').click();
-    await flush();
-    await flush();
-    expect(document.getElementById('restart').hidden).toBe(true);
-
-    document.querySelector('#step-2 [data-role="inc"]').click();
-    await flush();
-    document.querySelector('#step-2 [data-role="next"]').click();
-    await flush();
-    expect(document.getElementById('restart').hidden).toBe(true);
-
-    document.querySelector('#step-3 [data-role="form"]').elements.first_name.value;
-    expect(document.getElementById('restart').hidden).toBe(true);
-  });
-
-  it("devient visible à l'étape 5 (Confirmation) et n'efface rien si la confirmation est annulée", async () => {
-    mockFetchDefault();
-    await loadApp();
-    await reachConfirmation();
-
-    expect(document.getElementById('step-5').hidden).toBe(false);
-    expect(document.getElementById('restart').hidden).toBe(false);
-
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
-    document.getElementById('restart').click();
-    await flush();
-
-    expect(document.getElementById('step-5').hidden).toBe(false);
-  });
-
-  it('réinitialise état, étape et brouillon quand la confirmation est acceptée, et recommence à sauvegarder ensuite', async () => {
-    mockFetchDefault();
-    await loadApp();
-    await reachConfirmation();
-
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    document.getElementById('restart').click();
-
-    // Le brouillon est vidé de façon synchrone par restart() lui-même, avant
-    // même que le nouvel appel enter() de l'étape Bienvenue ne se résolve.
-    expect(document.getElementById('step-1').hidden).toBe(false);
-    expect(document.getElementById('restart').hidden).toBe(true);
-    expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
-    await flush();
-    await flush();
-
-    // Une saisie faite après Recommencer doit à nouveau être sauvegardée en
-    // brouillon (contrairement au cas confirmation, où draftSuppressed reste figé).
-    document.querySelector('#step-1 [data-role="start"]').click();
-    await flush();
-    await flush();
-    document.querySelector('#step-2 [data-role="inc"]').click();
-    await flush();
-    expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
-  });
-
-  it("ne laisse pas de saisie PII fantôme dans le DOM après Recommencer (bug signalé le 2026-11-09)", async () => {
-    mockFetchDefault();
-    await loadApp();
-    await reachConfirmation();
-
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
-    document.getElementById('restart').click();
-    await flush();
-    await flush();
-
-    // On revient sur l'étape Coordonnées : le DOM doit refléter l'état vidé,
-    // pas l'ancienne saisie ("Jean"/"Dupont"/le téléphone précédent).
-    document.querySelector('#step-1 [data-role="start"]').click();
-    await flush();
-    await flush();
-    document.querySelector('#step-2 [data-role="inc"]').click();
-    await flush();
-    document.querySelector('#step-2 [data-role="next"]').click();
-    await flush();
-
-    const form = document.querySelector('#step-3 [data-role="form"]');
-    expect(form.elements.first_name.value).toBe('');
-    expect(form.elements.last_name.value).toBe('');
-    expect(form.elements.phone.value).toBe('');
-
-    // Et la validation doit se comporter en conséquence : Suivant doit
-    // réclamer les champs, pas bloquer silencieusement sur un état fantôme.
-    document.querySelector('#step-3 [data-role="next"]').click();
-    await flush();
-    expect(document.querySelector('#step-3 [data-role="validation-error"]').hidden).toBe(false);
   });
 });
 

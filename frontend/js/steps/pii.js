@@ -90,17 +90,12 @@ async function handleNext(container, ctx) {
   }
 }
 
-// Resynchronise les champs depuis l'état à chaque passage sur cette étape :
-// sans ça, un changement d'état externe au formulaire (ex. "Recommencer",
-// .ai/decisions.md 2026-11-09) laissait les <input> afficher une ancienne
-// saisie alors que state.pii était déjà vide — le champ semblait prérempli
-// mais handleNext validait sur state.pii, pas sur le DOM, d'où le blocage.
 // Un numéro déjà utilisé cette saison ne peut pas être réutilisé pour
 // soumettre une 2e commande (dédoublonnage téléphone, .ai/decisions.md,
 // rejeté par le serveur à la validation) : la modification d'une commande
 // déjà confirmée reste réservée à l'admin (dashboard, M-DASH5), jamais via
 // une resoumission publique — décision confirmée par l'utilisateur le
-// 2026-11-09 suite à un retour sur le bouton « Recommencer ».
+// 2026-11-09.
 function duplicatePhoneMessage(state) {
   const hasContact = typeof state.contact_phone === 'string' && state.contact_phone.trim().length > 0;
   const contact = hasContact
@@ -110,14 +105,6 @@ function duplicatePhoneMessage(state) {
 }
 
 function render(container, state) {
-  const form = container.querySelector('[data-role="form"]');
-  for (const field of ['first_name', 'last_name', 'phone']) {
-    const input = form.elements[field];
-    const value = state.pii[field] || '';
-    if (document.activeElement !== input && input.value !== value) {
-      input.value = value;
-    }
-  }
   const warningEl = container.querySelector('[data-role="duplicate-warning"]');
   warningEl.hidden = !state.phoneDuplicateWarning;
   if (state.phoneDuplicateWarning) {
