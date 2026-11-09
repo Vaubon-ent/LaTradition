@@ -153,6 +153,25 @@ function applyOrderEdit(db, orderId, customerId, pii, { inserts, updates, delete
   run();
 }
 
+// Suppression admin d'une commande (demande directe du 2026-11-09) : le
+// client (table `customers`) n'est jamais supprimé, seulement la commande et
+// ses lignes — cohérent avec la conservation des données clients tranchée
+// ad vitam (.ai/decisions.md) et avec l'absence de CASCADE sur les clés
+// étrangères (schema.js), donc suppression explicite des lignes d'abord.
+// Retourne false si la commande n'existait pas (le routeur traduit en 404).
+function deleteOrder(db, id) {
+  const deleteItems = db.prepare('DELETE FROM order_items WHERE order_id = ?');
+  const deleteOrderStmt = db.prepare('DELETE FROM orders WHERE id = ?');
+
+  const run = db.transaction(() => {
+    deleteItems.run(id);
+    return deleteOrderStmt.run(id);
+  });
+
+  const result = run();
+  return result.changes > 0;
+}
+
 // Totaux de production (CDC §6.4) : somme des quantités (en unités de 500 g)
 // par produit, converties en kg, sur toutes les commandes de la saison
 // (aucune commande n'est jamais annulée, cf. CDC §5.4 — donc pas de filtre
@@ -188,6 +207,7 @@ module.exports = {
   getOrderById,
   getOrderItemsForEdit,
   applyOrderEdit,
+  deleteOrder,
   getProductionTotals,
   ORDER_STATUSES,
 };

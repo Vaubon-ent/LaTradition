@@ -7,6 +7,8 @@
   --color-border: #d8c9b4;
   --color-error-bg: #fdeceb;
   --color-error-text: #8c2f1b;
+  --color-danger: #c62828;
+  --color-danger-text: #ffffff;
 }
 
 * {
@@ -188,6 +190,12 @@ button.primary {
   border-color: var(--color-primary);
 }
 
+button.danger {
+  background: var(--color-danger);
+  color: var(--color-danger-text);
+  border-color: var(--color-danger);
+}
+
 .error {
   background: var(--color-error-bg);
   color: var(--color-error-text);
@@ -242,4 +250,24 @@ button.primary {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
+}
+
+.order-edit-actions[hidden] {
+  display: none;
+}
+
+.order-edit-delete-confirm {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--color-error-bg);
+  border-radius: 6px;
+}
+
+.order-edit-delete-confirm p {
+  margin: 0 0 8px;
+  color: var(--color-error-text);
+}
+
+.order-edit-delete-confirm .order-edit-actions {
+  margin-top: 0;
 }

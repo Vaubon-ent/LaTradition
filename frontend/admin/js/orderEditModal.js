@@ -4,7 +4,7 @@
 // vue commandes : pas de reconstruction DOM à chaque ouverture).
 
 import { PRODUCT_COLUMNS, kgForProduct, buildEditItemsPayload } from './ordersData.js';
-import { updateOrder } from './adminApi.js';
+import { updateOrder, deleteOrder } from './adminApi.js';
 
 // root : conteneur dans lequel la <dialog> est insérée (son positionnement
 // visuel ne dépend pas de ce conteneur, <dialog>.showModal() l'affiche dans
@@ -28,9 +28,17 @@ function mount(root, { onSaved } = {}) {
         ).join('')}
       </fieldset>
       <p data-role="order-edit-error" class="error" hidden></p>
-      <div class="order-edit-actions">
+      <div class="order-edit-actions" data-role="order-edit-actions">
+        <button type="button" class="danger" data-role="order-edit-delete">Supprimer</button>
         <button type="button" data-role="order-edit-cancel">Annuler</button>
         <button type="submit" class="primary" data-role="order-edit-save">Enregistrer</button>
+      </div>
+      <div class="order-edit-delete-confirm" data-role="order-edit-delete-confirm" hidden>
+        <p>Voulez-vous vraiment supprimer la commande ?</p>
+        <div class="order-edit-actions">
+          <button type="button" class="danger" data-role="order-edit-delete-yes">Oui</button>
+          <button type="button" data-role="order-edit-delete-no">Non</button>
+        </div>
       </div>
     </form>
   `;
@@ -38,11 +46,23 @@ function mount(root, { onSaved } = {}) {
 
   const form = dialog.querySelector('[data-role="order-edit-form"]');
   const errorEl = dialog.querySelector('[data-role="order-edit-error"]');
+  const actionsEl = dialog.querySelector('[data-role="order-edit-actions"]');
+  const deleteConfirmEl = dialog.querySelector('[data-role="order-edit-delete-confirm"]');
   let currentOrderId = null;
 
   function showError(text) {
     errorEl.hidden = !text;
     errorEl.textContent = text || '';
+  }
+
+  // Double validation (demande explicite de l'utilisateur, 2026-11-09) :
+  // un 1er clic sur "Supprimer" bascule vers un second écran "Oui"/"Non"
+  // dans la même modale, plutôt qu'un confirm() natif du navigateur — garde
+  // le libellé exact demandé et reste testable/cohérent avec le style de
+  // l'app (pas de boîte de dialogue bloquante hors de son contrôle).
+  function showDeleteConfirm(show) {
+    actionsEl.hidden = show;
+    deleteConfirmEl.hidden = !show;
   }
 
   // Repli sur l'attribut `open` si showModal()/close() sont absents
@@ -67,6 +87,7 @@ function mount(root, { onSaved } = {}) {
   function open(order) {
     currentOrderId = order.id;
     showError(null);
+    showDeleteConfirm(false);
     form.elements.last_name.value = order.last_name;
     form.elements.first_name.value = order.first_name;
     form.elements.phone.value = order.phone;
@@ -79,6 +100,27 @@ function mount(root, { onSaved } = {}) {
 
   dialog.querySelector('[data-role="order-edit-cancel"]').addEventListener('click', () => {
     closeDialog();
+  });
+
+  dialog.querySelector('[data-role="order-edit-delete"]').addEventListener('click', () => {
+    showError(null);
+    showDeleteConfirm(true);
+  });
+
+  dialog.querySelector('[data-role="order-edit-delete-no"]').addEventListener('click', () => {
+    showDeleteConfirm(false);
+  });
+
+  dialog.querySelector('[data-role="order-edit-delete-yes"]').addEventListener('click', async () => {
+    try {
+      await deleteOrder(currentOrderId);
+      showDeleteConfirm(false);
+      closeDialog();
+      if (onSaved) onSaved();
+    } catch (err) {
+      showDeleteConfirm(false);
+      showError(err.message || 'Échec de la suppression.');
+    }
   });
 
   // preventDefault bloque la fermeture native pour garder la modale ouverte

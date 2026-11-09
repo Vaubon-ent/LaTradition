@@ -10,6 +10,7 @@ import {
   updateOrderStatus,
   saveOrdersExport,
   updateOrder,
+  deleteOrder,
 } from '../admin/js/adminApi.js';
 
 function mockFetchOnce(status, body) {
@@ -112,5 +113,18 @@ describe('adminApi', () => {
       status: 409,
       message: 'Ce numéro de téléphone est déjà utilisé par un autre client.',
     });
+  });
+
+  it('deleteOrder envoie un DELETE vers /api/admin/orders/:id', async () => {
+    mockFetchOnce(200, { ok: true });
+    await expect(deleteOrder(42)).resolves.toEqual({ ok: true });
+    const [url, options] = global.fetch.mock.calls[0];
+    expect(url).toContain('/api/admin/orders/42');
+    expect(options.method).toBe('DELETE');
+  });
+
+  it('deleteOrder rejette avec une ApiError portant le message serveur (ex. 404)', async () => {
+    mockFetchOnce(404, { error: 'Commande introuvable.' });
+    await expect(deleteOrder(9999)).rejects.toMatchObject({ status: 404, message: 'Commande introuvable.' });
   });
 });

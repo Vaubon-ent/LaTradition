@@ -92,6 +92,12 @@ function updateOrder(id, payload) {
   });
 }
 
+// Suppression complète d'une commande (demande directe du 2026-11-09) :
+// double confirmation gérée côté UI (orderEditModal.js), pas ici.
+function deleteOrder(id) {
+  return adminFetch(`/api/admin/orders/${id}`, { method: 'DELETE' });
+}
+
 export {
   ApiError,
   onUnauthorized,
@@ -103,4 +109,5 @@ export {
   updateOrderStatus,
   saveOrdersExport,
   updateOrder,
+  deleteOrder,
 };

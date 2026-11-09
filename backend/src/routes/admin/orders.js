@@ -6,6 +6,7 @@ const {
   getOrderById,
   getOrderItemsForEdit,
   applyOrderEdit,
+  deleteOrder,
 } = require('../../db/ordersRepo');
 const { getSetting } = require('../../db/settingsRepo');
 const { getActiveProductsById } = require('../../db/productsRepo');
@@ -82,6 +83,18 @@ function createAdminOrdersRouter({ db }) {
       throw err;
     }
 
+    res.json({ ok: true });
+  });
+
+  // Suppression complète d'une commande (demande directe du 2026-11-09) :
+  // le client associé n'est jamais supprimé (deleteOrder, db/ordersRepo.js),
+  // seulement la commande et ses lignes. Double confirmation gérée côté
+  // front (popup admin) — aucune confirmation supplémentaire attendue ici.
+  router.delete('/:id', (req, res) => {
+    const deleted = deleteOrder(db, req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Commande introuvable.' });
+    }
     res.json({ ok: true });
   });
 

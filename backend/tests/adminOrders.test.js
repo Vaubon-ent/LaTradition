@@ -322,6 +322,47 @@ describe('PUT /api/admin/orders/:id', () => {
   });
 });
 
+describe('DELETE /api/admin/orders/:id', () => {
+  let db;
+
+  afterEach(() => {
+    db?.close();
+  });
+
+  it('supprime la commande et ses lignes, sans toucher au client', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, { items: [{ product_id: 'blanc', quantity_500g: 2 }] });
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+    const customerId = db.prepare('SELECT customer_id FROM orders WHERE id = ?').get(orderId).customer_id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.delete(`/api/admin/orders/${orderId}`);
+
+    expect(res.status).toBe(200);
+    expect(db.prepare('SELECT * FROM orders WHERE id = ?').get(orderId)).toBeUndefined();
+    expect(db.prepare('SELECT * FROM order_items WHERE order_id = ?').all(orderId)).toHaveLength(0);
+    // Le client reste (conservation ad vitam, .ai/decisions.md) — seule la
+    // commande est supprimée, pas son historique client.
+    expect(db.prepare('SELECT * FROM customers WHERE id = ?').get(customerId)).toBeDefined();
+  });
+
+  it('renvoie 404 pour une commande inexistante', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+    const res = await agent.delete('/api/admin/orders/9999');
+    expect(res.status).toBe(404);
+  });
+
+  it('refuse sans authentification', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const res = await request(built.app).delete('/api/admin/orders/1');
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('GET /api/admin/production', () => {
   let db;
 
