@@ -1,20 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { getDb } from '../src/db/connection.js';
-import { migrate } from '../src/db/migrate.js';
+import { describe, it, expect, vi } from 'vitest';
 import { generateNonce } from '../src/services/nonce.js';
 import { createAntiAbuseGuard } from '../src/middleware/antiAbuseGuard.js';
 
 const SECRET = 'test-secret';
-let db;
-
-beforeEach(() => {
-  db = getDb(':memory:');
-  migrate(db);
-});
-
-afterEach(() => {
-  db.close();
-});
 
 function mockRes() {
   const res = { statusCode: null, body: null };
@@ -30,12 +18,12 @@ function mockRes() {
 }
 
 describe('createAntiAbuseGuard', () => {
-  it('laisse passer une requête valide (nonce frais, honeypot vide, délai respecté)', () => {
+  it('laisse passer une requête valide (nonce frais, honeypot vide, délai respecté) et expose nonceInfo', () => {
     let clock = 1_700_000_000_000;
     const nonce = generateNonce(SECRET, { now: clock });
     clock += 4000; // au-delà du délai minimum par défaut (3000 ms)
 
-    const guard = createAntiAbuseGuard({ db, secret: SECRET, now: () => clock });
+    const guard = createAntiAbuseGuard({ secret: SECRET, now: () => clock });
     const req = { body: { nonce } };
     const res = mockRes();
     const next = vi.fn();
@@ -44,22 +32,11 @@ describe('createAntiAbuseGuard', () => {
 
     expect(next).toHaveBeenCalledOnce();
     expect(res.statusCode).toBeNull();
-  });
-
-  it('rejette une 2e requête réutilisant le même nonce', () => {
-    let clock = 1_700_000_000_000;
-    const nonce = generateNonce(SECRET, { now: clock });
-    clock += 4000;
-
-    const guard = createAntiAbuseGuard({ db, secret: SECRET, now: () => clock });
-    guard({ body: { nonce } }, mockRes(), vi.fn());
-
-    const res2 = mockRes();
-    const next2 = vi.fn();
-    guard({ body: { nonce } }, res2, next2);
-
-    expect(next2).not.toHaveBeenCalled();
-    expect(res2.statusCode).toBe(400);
+    // La consommation effective du nonce est désormais différée jusqu'à la
+    // création de la commande (db/ordersRepo.createOrder), pas ici — voir
+    // orders.test.js pour la couverture de la réutilisation/du doublon.
+    // Révisé le 2026-11-09 (bug P0, audit UX).
+    expect(req.nonceInfo).toMatchObject({ issuedAt: 1_700_000_000_000 });
   });
 
   it('rejette si le champ honeypot est rempli', () => {
@@ -67,7 +44,7 @@ describe('createAntiAbuseGuard', () => {
     const nonce = generateNonce(SECRET, { now: clock });
     clock += 4000;
 
-    const guard = createAntiAbuseGuard({ db, secret: SECRET, now: () => clock });
+    const guard = createAntiAbuseGuard({ secret: SECRET, now: () => clock });
     const res = mockRes();
     const next = vi.fn();
 
@@ -82,7 +59,7 @@ describe('createAntiAbuseGuard', () => {
     const nonce = generateNonce(SECRET, { now: clock });
     clock += 100; // bien en dessous du délai minimum
 
-    const guard = createAntiAbuseGuard({ db, secret: SECRET, now: () => clock });
+    const guard = createAntiAbuseGuard({ secret: SECRET, now: () => clock });
     const res = mockRes();
     const next = vi.fn();
 
@@ -92,8 +69,8 @@ describe('createAntiAbuseGuard', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('rejette un nonce invalide sans jamais le consommer en double-compte', () => {
-    const guard = createAntiAbuseGuard({ db, secret: SECRET });
+  it('rejette un nonce invalide', () => {
+    const guard = createAntiAbuseGuard({ secret: SECRET });
     const res = mockRes();
     const next = vi.fn();
 

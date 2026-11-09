@@ -112,6 +112,25 @@ describe('POST /api/orders', () => {
     expect(res2.status).toBe(409);
   });
 
+  it('P0 (audit UX 2026-11-09) : un refus pour doublon téléphone (409) ne consomme pas le nonce — la même requête avec un téléphone corrigé réussit ensuite avec le même nonce', async () => {
+    const built = buildTestApp();
+    db = built.db;
+
+    const nonce1 = await getNonce(built.app);
+    await request(built.app).post('/api/orders').send({ ...validOrder(), nonce: nonce1 });
+
+    const nonce2 = await getNonce(built.app);
+    const duplicateAttempt = await request(built.app)
+      .post('/api/orders')
+      .send({ ...validOrder(), nonce: nonce2 }); // même téléphone que la 1re commande → doublon
+    expect(duplicateAttempt.status).toBe(409);
+
+    const retry = await request(built.app)
+      .post('/api/orders')
+      .send({ ...validOrder(), phone: '06 99 99 99 99', nonce: nonce2 }); // même nonce, téléphone corrigé
+    expect(retry.status).toBe(201);
+  });
+
   it('fige le prix unitaire dans order_items : une modification ultérieure du prix ne change pas la commande déjà passée', async () => {
     const built = buildTestApp();
     db = built.db;

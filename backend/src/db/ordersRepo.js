@@ -1,11 +1,21 @@
 const { updateCustomerPii } = require('./customersRepo');
+const { consumeNonce } = require('./nonceStore');
 
 class DuplicateOrderError extends Error {}
 
 // La contrainte UNIQUE (customer_id, season) de la table `orders` (M2) est le
 // mécanisme réel qui implémente la décision « dédoublonnage par téléphone » :
 // on se contente ici de traduire sa violation en erreur métier lisible.
-function createOrder(db, { customerId, season, lines, totalCents }) {
+//
+// `nonceInfo` (optionnel, absent pour les appels de test qui fabriquent des
+// commandes directement) est consommé dans la même transaction que
+// l'insertion : si la commande échoue plus loin (doublon téléphone/saison),
+// tout est annulé ensemble, nonce compris — il reste donc réutilisable pour
+// une correction (ex. téléphone corrigé) tant que son TTL n'est pas dépassé.
+// Révisé le 2026-11-09 (bug P0, audit UX) : auparavant consommé en amont, dans
+// `middleware/antiAbuseGuard.js`, avant même de savoir si la commande serait
+// créée.
+function createOrder(db, { customerId, season, lines, totalCents, nonceInfo }) {
   const insertOrder = db.prepare(
     'INSERT INTO orders (customer_id, season, total_cents) VALUES (@customerId, @season, @totalCents)'
   );
@@ -15,6 +25,10 @@ function createOrder(db, { customerId, season, lines, totalCents }) {
   );
 
   const run = db.transaction(() => {
+    if (nonceInfo) {
+      consumeNonce(db, nonceInfo);
+    }
+
     let orderId;
     try {
       const result = insertOrder.run({ customerId, season, totalCents });
