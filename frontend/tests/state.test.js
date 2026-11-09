@@ -10,6 +10,8 @@ import {
   hasAnyQuantity,
   toDraft,
   applyDraft,
+  formatKgLabel,
+  estimateLineCents,
 } from '../js/state.js';
 
 describe('step navigation', () => {
@@ -82,5 +84,34 @@ describe('draft projection (F7)', () => {
   it('is a no-op when there is no draft', () => {
     const state = createInitialState();
     expect(applyDraft(state, null)).toBe(state);
+  });
+});
+
+describe('formatKgLabel (M-FR1)', () => {
+  it('affiche un entier sans décimale', () => {
+    expect(formatKgLabel(2)).toBe('2');
+  });
+
+  it('remplace le point par une virgule pour une quantité décimale', () => {
+    expect(formatKgLabel(1.5)).toBe('1,5');
+  });
+});
+
+describe('estimateLineCents (M-FR1 — miroir exact de la formule serveur)', () => {
+  it('calcule une estimation pour une quantité entière', () => {
+    // 10,00 €/kg -> 500 c/500g, 2 kg -> 4 x 500g
+    expect(estimateLineCents({ price_per_kg: 1000 }, 2)).toBe(2000);
+  });
+
+  it('calcule une estimation pour une quantité à 0,5 kg', () => {
+    expect(estimateLineCents({ price_per_kg: 1000 }, 0.5)).toBe(500);
+  });
+
+  it('ne diverge jamais du total serveur pour un prix en centimes impair (double arrondi)', () => {
+    // price_per_kg = 1401 -> unitPriceCents serveur = round(1401/2) = 701
+    // Un calcul naïf (price_per_kg * quantityKg, sans passer par le prix au
+    // 500g arrondi) donnerait 1401 * 1.5 = 2101.5 -> un arrondi différent.
+    const product = { price_per_kg: 1401 };
+    expect(estimateLineCents(product, 1.5)).toBe(2103); // 3 x 701
   });
 });

@@ -1,5 +1,5 @@
 import { submitOrder } from '../api.js';
-import { setOrderResult } from '../state.js';
+import { setOrderResult, formatKgLabel, estimateLineCents } from '../state.js';
 
 function formatEuros(cents) {
   return (cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -8,7 +8,14 @@ function formatEuros(cents) {
 function init(container, ctx) {
   container.innerHTML = `
     <h2>Récapitulatif</h2>
-    <ul data-role="lines"></ul>
+    <div class="receipt" data-role="lines"></div>
+    <div class="receipt-total" data-role="total-line">
+      <span>Estimation</span>
+      <span data-role="total">0,00 €</span>
+    </div>
+    <p class="receipt-note muted" data-role="note">
+      Montant définitif confirmé à la validation.
+    </p>
     <p data-role="error" class="error" hidden></p>
     <div class="nav">
       <button type="button" data-role="prev">Précédent</button>
@@ -48,18 +55,33 @@ async function handleSubmit(container, ctx) {
   }
 }
 
+// Estimation affichée ici uniquement (ne révise pas F5 : la commande
+// réellement soumise, handleSubmit ci-dessus, continue de n'envoyer que les
+// quantités — le calcul et le total qui font foi restent exclusivement
+// serveur, affichés à l'étape Confirmation).
 function render(container, state) {
   const linesEl = container.querySelector('[data-role="lines"]');
   linesEl.innerHTML = '';
   const productsById = Object.fromEntries(state.products.map((p) => [p.id, p]));
+  let totalCents = 0;
   for (const [productId, quantityKg] of Object.entries(state.items)) {
     const product = productsById[productId];
-    const li = document.createElement('li');
     const label = product ? product.name : productId;
-    const priceInfo = product ? ` (${formatEuros(product.price_per_kg)} €/kg)` : '';
-    li.textContent = `${label} — ${quantityKg} kg${priceInfo}`;
-    linesEl.appendChild(li);
+    const lineCents = product ? estimateLineCents(product, quantityKg) : 0;
+    totalCents += lineCents;
+
+    const line = document.createElement('div');
+    line.className = 'receipt-line';
+    const labelEl = document.createElement('span');
+    labelEl.className = 'label';
+    labelEl.textContent = `${label} — ${formatKgLabel(quantityKg)} kg`;
+    const amountEl = document.createElement('span');
+    amountEl.className = 'amount';
+    amountEl.textContent = `${formatEuros(lineCents)} €`;
+    line.append(labelEl, amountEl);
+    linesEl.appendChild(line);
   }
+  container.querySelector('[data-role="total"]').textContent = `${formatEuros(totalCents)} €`;
 }
 
 export { init, render };

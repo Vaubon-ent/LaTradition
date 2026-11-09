@@ -39,6 +39,16 @@ header {
   margin-bottom: 16px;
 }
 
+#restart {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  font-weight: 400;
+}
+
+#restart[hidden] {
+  display: none;
+}
+
 .step[hidden] {
   display: none;
 }
@@ -124,8 +134,11 @@ button.primary {
 }
 
 .stepper button {
-  width: 36px;
-  height: 36px;
+  /* 44px : zone tactile recommandée (audit UX #8, .ai/decisions.md) — vérifié
+     que le stepper (boutons + champ 64px + marges) reste sous les 320px max
+     du formulaire. */
+  width: 44px;
+  height: 44px;
   padding: 0;
   font-size: 1.2rem;
   line-height: 1;
@@ -187,6 +200,23 @@ button.primary {
   font-weight: 600;
 }
 
+/* Responsive stepper (pc/tablette) vs roulette (mobile), étape Commande
+   (.ai/decisions.md, 2026-11-09) : CSS pur, jamais les deux widgets en même
+   temps. Le champ de saisie libre (input[data-role="qty"]) n'est masqué dans
+   aucun des deux cas. */
+@media (min-width: 768px) {
+  .qty-wheel {
+    display: none !important;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .stepper button[data-role="dec"],
+  .stepper button[data-role="inc"] {
+    display: none;
+  }
+}
+
 .muted {
   color: #7a6a55;
 }
@@ -209,5 +239,42 @@ ul {
   list-style: none;
   padding: 0;
   margin: 0 0 16px;
+  text-align: center;
+}
+
+/* Carte Récapitulatif façon ticket de caisse (.ai/decisions.md, 2026-11-09) :
+   police mono, lignes alignées, séparateurs pointillés, total mis en évidence. */
+.receipt {
+  font-family: 'Courier New', Courier, monospace;
+  text-align: left;
+  max-width: 320px;
+  margin: 0 auto 16px;
+}
+
+.receipt-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.receipt-line .label {
+  overflow-wrap: anywhere;
+}
+
+.receipt-total {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0 2px;
+  margin-top: 4px;
+  border-top: 2px solid var(--color-text);
+  font-weight: 700;
+}
+
+.receipt-note {
+  margin: 6px 0 16px;
+  font-size: 0.85rem;
   text-align: center;
 }

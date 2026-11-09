@@ -1,10 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DRAFT_KEY } from '../js/draft.js';
 
 function setupDom() {
   document.body.innerHTML = `
     <div id="app">
-      <header><p id="progress"></p></header>
+      <header><p id="progress"></p><button type="button" id="restart" hidden>Recommencer</button></header>
       <main>
         <section id="step-1" class="step"></section>
         <section id="step-2" class="step"></section>
@@ -39,13 +42,13 @@ const SETTINGS_RESPONSE = {
 };
 const PRODUCTS_RESPONSE = { products: [{ id: 'blanc', name: 'Boudin blanc', price_per_kg: 1000 }] };
 
-function mockFetchDefault({ checkPhoneResult, checkPhoneFails, orderResult, orderFails } = {}) {
+function mockFetchDefault({ checkPhoneResult, checkPhoneFails, orderResult, orderFails, products } = {}) {
   global.fetch = vi.fn(async (url, options = {}) => {
     if (url.includes('/api/settings/public')) {
       return { ok: true, json: async () => SETTINGS_RESPONSE };
     }
     if (url.includes('/api/products')) {
-      return { ok: true, json: async () => PRODUCTS_RESPONSE };
+      return { ok: true, json: async () => (products ? { products } : PRODUCTS_RESPONSE) };
     }
     if (url.includes('/api/check-phone')) {
       if (checkPhoneFails) {
@@ -280,5 +283,200 @@ describe('soumission de commande et brouillon (F5/F6/F7)', () => {
     const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
     expect(draft.pii.first_name).toBe('Jean');
     expect(draft.items.blanc).toBe(1);
+  });
+});
+
+describe('carte Récapitulatif — estimation façon ticket de caisse (M-FR2)', () => {
+  async function fillUpToRecap() {
+    await goToPii();
+    const form = document.querySelector('#step-3 [data-role="form"]');
+    fireInput(form.elements.first_name, 'Jean');
+    fireInput(form.elements.last_name, 'Dupont');
+    fireInput(form.elements.phone, '0612345678');
+    document.querySelector('#step-3 [data-role="next"]').click();
+    await flush();
+    await flush();
+  }
+
+  it("n'affiche plus jamais le prix au kg, affiche une estimation par ligne et un total cohérent", async () => {
+    mockFetchDefault();
+    await loadApp();
+    await fillUpToRecap();
+
+    const recap = document.getElementById('step-4');
+    expect(recap.textContent).not.toContain('€/kg');
+
+    // blanc à 1000 c/kg (10,00 €/kg), 1 kg commandé (goToPii incrémente une
+    // fois) -> estimation de ligne = 1000c/500g x 2 = 1000c = 10,00 €.
+    const line = recap.querySelector('[data-role="lines"] .receipt-line');
+    expect(line.querySelector('.amount').textContent).toContain('10,00');
+
+    const totalLine = recap.querySelector('[data-role="total-line"]');
+    expect(totalLine.textContent).toContain('Estimation');
+    expect(totalLine.textContent).not.toMatch(/^Total/);
+    expect(recap.querySelector('[data-role="total"]').textContent).toContain('10,00');
+
+    expect(recap.querySelector('[data-role="note"]').textContent).toContain('définitif');
+  });
+});
+
+describe('bouton Recommencer (M-FR5)', () => {
+  it("n'est pas visible à l'étape 1", async () => {
+    mockFetchDefault();
+    await loadApp();
+    expect(document.getElementById('restart').hidden).toBe(true);
+  });
+
+  it("est visible dès l'étape 2 et n'efface rien si la confirmation est annulée", async () => {
+    mockFetchDefault();
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+    document.querySelector('#step-2 [data-role="inc"]').click();
+    await flush();
+
+    expect(document.getElementById('restart').hidden).toBe(false);
+
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    document.getElementById('restart').click();
+    await flush();
+
+    expect(document.getElementById('step-2').hidden).toBe(false);
+    expect(document.querySelector('#step-2 [data-role="qty"]').value).toBe('1');
+  });
+
+  it('réinitialise état, étape et brouillon quand la confirmation est acceptée, et recommence à sauvegarder ensuite', async () => {
+    mockFetchDefault();
+    await loadApp();
+    await goToPii();
+    const form = document.querySelector('#step-3 [data-role="form"]');
+    fireInput(form.elements.first_name, 'Jean');
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    document.getElementById('restart').click();
+
+    // Le brouillon est vidé de façon synchrone par restart() lui-même, avant
+    // même que le nouvel appel enter() de l'étape Bienvenue ne se résolve.
+    expect(document.getElementById('step-1').hidden).toBe(false);
+    expect(document.getElementById('restart').hidden).toBe(true);
+    expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
+    await flush();
+    await flush();
+
+    // Une saisie faite après Recommencer doit à nouveau être sauvegardée en
+    // brouillon (contrairement au cas confirmation, où draftSuppressed reste figé).
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+    document.querySelector('#step-2 [data-role="inc"]').click();
+    await flush();
+    expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
+  });
+});
+
+describe('responsive stepper/roulette — règles CSS présentes (M-FR3)', () => {
+  it('masque la roulette en pc/tablette et le stepper +/- en mobile, via media queries pures', () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(testDir, '..', 'css', 'styles.css'), 'utf8');
+
+    expect(css).toMatch(/@media\s*\(min-width:\s*768px\)\s*\{[^}]*\.qty-wheel\s*\{[^}]*display:\s*none/s);
+    expect(css).toMatch(
+      /@media\s*\(max-width:\s*767\.98px\)\s*\{[\s\S]*?\.stepper button\[data-role="dec"\][\s\S]*?\.stepper button\[data-role="inc"\][\s\S]*?display:\s*none/
+    );
+  });
+});
+
+describe('étape Commande — une seule roulette ouverte à la fois (M-FR3)', () => {
+  it('ferme la roulette du premier produit quand on ouvre celle du second', async () => {
+    mockFetchDefault({
+      products: [
+        { id: 'blanc', name: 'Boudin blanc', price_per_kg: 1000 },
+        { id: 'noir', name: 'Boudin noir', price_per_kg: 1000 },
+      ],
+    });
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+
+    const cards = document.querySelectorAll('#step-2 .product-card');
+    const qtyA = cards[0].querySelector('[data-role="qty"]');
+    const wheelA = cards[0].querySelector('[data-role="wheel"]');
+    const qtyB = cards[1].querySelector('[data-role="qty"]');
+    const wheelB = cards[1].querySelector('[data-role="wheel"]');
+
+    qtyA.focus();
+    expect(wheelA.hidden).toBe(false);
+
+    qtyB.focus();
+    expect(wheelB.hidden).toBe(false);
+    expect(wheelA.hidden).toBe(true);
+  });
+});
+
+describe('étape Coordonnées — correctifs audit UX P1/P2 (M-FR4)', () => {
+  it('#1 : le message de validation se masque dès que la saisie redevient valide, sans clic sur Suivant', async () => {
+    mockFetchDefault();
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+    document.querySelector('#step-2 [data-role="inc"]').click();
+    await flush();
+    document.querySelector('#step-2 [data-role="next"]').click();
+    await flush();
+
+    document.querySelector('#step-3 [data-role="next"]').click();
+    await flush();
+    const errorEl = document.querySelector('#step-3 [data-role="validation-error"]');
+    expect(errorEl.hidden).toBe(false);
+
+    const form = document.querySelector('#step-3 [data-role="form"]');
+    fireInput(form.elements.first_name, 'Jean');
+    fireInput(form.elements.last_name, 'Dupont');
+    fireInput(form.elements.phone, '0612345678');
+
+    expect(errorEl.hidden).toBe(true);
+  });
+
+  it("#7 : valider le formulaire par la touche Entrée (submit) déclenche la même action que Suivant", async () => {
+    mockFetchDefault();
+    await loadApp();
+    await goToPii();
+
+    const form = document.querySelector('#step-3 [data-role="form"]');
+    fireInput(form.elements.first_name, 'Jean');
+    fireInput(form.elements.last_name, 'Dupont');
+    fireInput(form.elements.phone, '0612345678');
+
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    await flush();
+    await flush();
+
+    expect(document.getElementById('step-4').hidden).toBe(false);
+  });
+
+  it('#5 : le bouton Suivant est désactivé pendant la vérification puis réactivé (succès et échec)', async () => {
+    mockFetchDefault();
+    await loadApp();
+    await goToPii();
+
+    const form = document.querySelector('#step-3 [data-role="form"]');
+    fireInput(form.elements.first_name, 'Jean');
+    fireInput(form.elements.last_name, 'Dupont');
+    fireInput(form.elements.phone, '0612345678');
+
+    const nextButton = document.querySelector('#step-3 [data-role="next"]');
+    const clickPromise = (async () => {
+      nextButton.click();
+    })();
+    await Promise.resolve();
+    expect(nextButton.disabled).toBe(true);
+
+    await clickPromise;
+    await flush();
+    await flush();
+    expect(nextButton.disabled).toBe(false);
   });
 });

@@ -18,6 +18,7 @@ function start() {
     containers[step] = document.getElementById(`step-${step}`);
   }
   const progressEl = document.getElementById('progress');
+  const restartEl = document.getElementById('restart');
 
   const ctx = {
     getState: () => state,
@@ -26,6 +27,23 @@ function start() {
     goPrev: () => update(previousStep),
     clearDraftOnConfirmation,
   };
+
+  restartEl.addEventListener('click', restart);
+
+  // Distincte de clearDraftOnConfirmation : contrairement à la confirmation
+  // réussie, draftSuppressed n'est jamais figé à true ici — les saisies
+  // suivant un "Recommencer" doivent reprendre à être sauvegardées en
+  // brouillon normalement (.ai/decisions.md, 2026-11-09).
+  function restart() {
+    const confirmed = window.confirm('Êtes-vous sûr ? Votre commande en cours sera effacée.');
+    if (!confirmed) {
+      return;
+    }
+    state = createInitialState();
+    clearDraft();
+    draftSuppressed = false;
+    renderAll();
+  }
 
   function update(mutator) {
     state = mutator(state);
@@ -45,6 +63,7 @@ function start() {
       containers[step].hidden = step !== state.step;
     }
     progressEl.textContent = `Étape ${state.step}/${MAX_STEP}`;
+    restartEl.hidden = state.step <= 1;
 
     if (state.step !== renderedStep) {
       renderedStep = state.step;

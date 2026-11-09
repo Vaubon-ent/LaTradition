@@ -70,6 +70,20 @@ function hasAnyQuantity(state) {
   return Object.values(state.items).some((qty) => qty > 0);
 }
 
+function formatKgLabel(value) {
+  return value % 1 === 0 ? String(value) : String(value).replace('.', ',');
+}
+
+// Réplique exactement la formule serveur (backend/src/services/pricing.js :
+// unitPriceCents = round(price_per_kg / 2), line_total = quantity_500g *
+// unitPriceCents) pour qu'une estimation pré-soumission ne diverge jamais du
+// total réel de plus d'un centime d'arrondi.
+function estimateLineCents(product, quantityKg) {
+  const pricePer500g = Math.round(product.price_per_kg / 2);
+  const quantity500g = Math.round(quantityKg * 2);
+  return quantity500g * pricePer500g;
+}
+
 function setPiiField(state, field, value) {
   return { ...state, pii: { ...state.pii, [field]: value } };
 }
@@ -140,6 +154,8 @@ export {
   incrementProductQuantity,
   decrementProductQuantity,
   hasAnyQuantity,
+  formatKgLabel,
+  estimateLineCents,
   setPiiField,
   setProducts,
   setPublicSettings,

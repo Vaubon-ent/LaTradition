@@ -8,6 +8,7 @@ import {
   setPublicSettings,
   roundToStep,
   QUANTITY_STEP_KG,
+  formatKgLabel,
 } from '../state.js';
 
 // Incrément par défaut des boutons +/- : 1 kg (l'unité la plus courante).
@@ -27,10 +28,6 @@ function escapeHtml(value) {
 
 function formatEuros(cents) {
   return (cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatKgLabel(value) {
-  return value % 1 === 0 ? String(value) : String(value).replace('.', ',');
 }
 
 function buildWheelValues() {
@@ -118,6 +115,14 @@ function render(container, state, ctx) {
       }
 
       const openWheel = () => {
+        // Une seule roulette ouverte à la fois entre cartes produit (surtout
+        // utile sur mobile, où le stepper +/- est masqué par CSS — voir
+        // styles.css — et où plusieurs cartes peuvent se chevaucher sinon).
+        for (const otherWheel of productsEl.querySelectorAll('[data-role="wheel"]')) {
+          if (otherWheel !== wheelEl) {
+            otherWheel.hidden = true;
+          }
+        }
         syncWheel(wheelEl, Number(qtyInput.value) || 0);
         wheelEl.hidden = false;
       };
