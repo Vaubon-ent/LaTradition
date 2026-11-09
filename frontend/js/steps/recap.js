@@ -5,6 +5,18 @@ function formatEuros(cents) {
   return (cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// 409 = doublon téléphone/saison (seul cas où le serveur renvoie ce statut
+// sur cette route, backend/src/routes/orders.js) : la modification d'une
+// commande déjà confirmée reste réservée à l'admin, jamais une resoumission
+// publique (.ai/decisions.md, retour utilisateur du 2026-11-09).
+function duplicateOrderMessage(state) {
+  const hasContact = typeof state.contact_phone === 'string' && state.contact_phone.trim().length > 0;
+  const contact = hasContact
+    ? ` Contactez-nous au ${state.contact_phone} pour la modifier.`
+    : ' Contactez-nous directement pour la modifier.';
+  return `Vous avez déjà une commande enregistrée cette saison avec ce numéro.${contact}`;
+}
+
 function init(container, ctx) {
   container.innerHTML = `
     <h2>Récapitulatif</h2>
@@ -50,7 +62,8 @@ async function handleSubmit(container, ctx) {
     ctx.update((s) => setOrderResult(s, order));
     ctx.goNext();
   } catch (err) {
-    errorEl.textContent = err.message || 'Impossible de valider la commande. Réessayez.';
+    errorEl.textContent =
+      err.status === 409 ? duplicateOrderMessage(state) : err.message || 'Impossible de valider la commande. Réessayez.';
     errorEl.hidden = false;
   }
 }

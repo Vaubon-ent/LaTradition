@@ -45,4 +45,28 @@ describe('confirmation — informations pratiques', () => {
     expect(container.querySelector('[data-role="pickup-time"]').hidden).toBe(true);
     expect(container.querySelector('[data-role="contact"]').hidden).toBe(true);
   });
+
+  it('affiche un émoji décoratif distinct pour chaque ligne, sans écraser le texte (retour utilisateur du 2026-11-09)', () => {
+    const container = document.createElement('div');
+    init(container);
+    let state = setOrderResult(createInitialState(), { total_cents: 1000, conception_date: '2026-12-13' });
+    state = setPublicSettings(state, {
+      conceptionDate: '2026-12-13',
+      orderDeadline: '2026-12-06',
+      locked: false,
+      nonce: 'n',
+      news: '',
+      pickup_address: '12 rue de la Tradition, 12345 Boudinville',
+      pickup_time: 'à partir de 16h',
+      contact_phone: '06 11 22 33 44',
+    });
+
+    render(container, state);
+
+    for (const role of ['total', 'deadline', 'address', 'pickup-time', 'contact']) {
+      const line = container.querySelector(`[data-role="${role}"]`);
+      expect(line.querySelector('.icon').textContent.trim().length).toBeGreaterThan(0);
+      expect(line.querySelector('.text').textContent.trim().length).toBeGreaterThan(0);
+    }
+  });
 });

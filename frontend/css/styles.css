@@ -39,10 +39,12 @@ header {
   margin-bottom: 16px;
 }
 
+/* Visible uniquement à l'étape 5 (retour utilisateur du 2026-11-09) : avant
+   cette étape, le bouton "Précédent" de chaque étape couvre déjà le besoin de
+   navigation arrière. Positionné sous la carte, même style que "Commander". */
 #restart {
-  margin-top: 8px;
-  font-size: 0.85rem;
-  font-weight: 400;
+  display: block;
+  margin: 20px auto 0;
 }
 
 #restart[hidden] {
@@ -152,8 +154,16 @@ button.primary {
   text-align: center;
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  /* Garde les flèches natives du navigateur : utiles ici en complément du
-     stepper +/-, jamais le seul moyen d'ajuster la quantité. */
+  /* Flèches natives du navigateur masquées (retour utilisateur du
+     2026-11-09) : sur pc/tablette, seuls les boutons +/- de la carte ou une
+     saisie directe (y compris à virgule) ajustent la quantité. */
+  -moz-appearance: textfield;
+}
+
+.stepper input[type='number']::-webkit-outer-spin-button,
+.stepper input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .stepper .unit {
@@ -277,4 +287,34 @@ ul {
   margin: 6px 0 16px;
   font-size: 0.85rem;
   text-align: center;
+}
+
+/* Étape Confirmation : un émoji décoratif par information (retour
+   utilisateur du 2026-11-09), même palette que le reste de l'app. */
+.confirmation-details {
+  max-width: 320px;
+  margin: 16px auto;
+  text-align: left;
+}
+
+.confirmation-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 0;
+  border-bottom: 1px dashed var(--color-border);
+}
+
+.confirmation-line[hidden] {
+  display: none;
+}
+
+.confirmation-line:last-child {
+  border-bottom: none;
+}
+
+.confirmation-line .icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
 }

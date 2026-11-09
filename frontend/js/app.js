@@ -63,7 +63,10 @@ function start() {
       containers[step].hidden = step !== state.step;
     }
     progressEl.textContent = `Étape ${state.step}/${MAX_STEP}`;
-    restartEl.hidden = state.step <= 1;
+    // Visible uniquement à l'étape 5 : avant, le bouton "Précédent" de chaque
+    // étape couvre déjà le besoin de revenir en arrière (retour utilisateur
+    // du 2026-11-09).
+    restartEl.hidden = state.step !== MAX_STEP;
 
     if (state.step !== renderedStep) {
       renderedStep = state.step;

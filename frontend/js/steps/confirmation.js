@@ -1,11 +1,16 @@
+// Un émoji par information rappelée (retour utilisateur du 2026-11-09),
+// décoratif uniquement : le libellé textuel reste la seule information
+// portée, l'émoji ne fait jamais office de légende à lui seul.
 function init(container) {
   container.innerHTML = `
     <h2>Merci pour votre commande !</h2>
-    <p data-role="total"></p>
-    <p data-role="deadline"></p>
-    <p data-role="address" hidden></p>
-    <p data-role="pickup-time" hidden></p>
-    <p data-role="contact" hidden></p>
+    <div class="confirmation-details">
+      <p class="confirmation-line" data-role="total"><span class="icon" aria-hidden="true">🧾</span><span class="text"></span></p>
+      <p class="confirmation-line" data-role="deadline"><span class="icon" aria-hidden="true">📅</span><span class="text"></span></p>
+      <p class="confirmation-line" data-role="address" hidden><span class="icon" aria-hidden="true">📍</span><span class="text"></span></p>
+      <p class="confirmation-line" data-role="pickup-time" hidden><span class="icon" aria-hidden="true">🕒</span><span class="text"></span></p>
+      <p class="confirmation-line" data-role="contact" hidden><span class="icon" aria-hidden="true">📞</span><span class="text"></span></p>
+    </div>
     <p class="muted">Paiement en ligne : disponible prochainement.</p>
   `;
 }
@@ -30,33 +35,37 @@ function enter(container, ctx) {
   ctx.clearDraftOnConfirmation();
 }
 
+function lineText(el) {
+  return el.querySelector('.text');
+}
+
 function render(container, state) {
   const totalEl = container.querySelector('[data-role="total"]');
   const deadlineEl = container.querySelector('[data-role="deadline"]');
   if (state.order) {
-    totalEl.textContent = `Total : ${formatEuros(state.order.total_cents)} €`;
-    deadlineEl.textContent = `Date de retrait : ${formatDateLong(state.order.conception_date)}`;
+    lineText(totalEl).textContent = `Total : ${formatEuros(state.order.total_cents)} €`;
+    lineText(deadlineEl).textContent = `Date de retrait : ${formatDateLong(state.order.conception_date)}`;
   }
 
   const addressEl = container.querySelector('[data-role="address"]');
   const hasAddress = typeof state.pickup_address === 'string' && state.pickup_address.trim().length > 0;
   addressEl.hidden = !hasAddress;
   if (hasAddress) {
-    addressEl.textContent = `Adresse de retrait : ${state.pickup_address}`;
+    lineText(addressEl).textContent = `Adresse de retrait : ${state.pickup_address}`;
   }
 
   const pickupTimeEl = container.querySelector('[data-role="pickup-time"]');
   const hasPickupTime = typeof state.pickup_time === 'string' && state.pickup_time.trim().length > 0;
   pickupTimeEl.hidden = !hasPickupTime;
   if (hasPickupTime) {
-    pickupTimeEl.textContent = `Heure de retrait : ${state.pickup_time}`;
+    lineText(pickupTimeEl).textContent = `Heure de retrait : ${state.pickup_time}`;
   }
 
   const contactEl = container.querySelector('[data-role="contact"]');
   const hasContact = typeof state.contact_phone === 'string' && state.contact_phone.trim().length > 0;
   contactEl.hidden = !hasContact;
   if (hasContact) {
-    contactEl.textContent = `Une question ? Contactez-nous au ${state.contact_phone}`;
+    lineText(contactEl).textContent = `Une question ? Contactez-nous au ${state.contact_phone}`;
   }
 }
 

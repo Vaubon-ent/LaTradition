@@ -24,9 +24,7 @@ function init(container, ctx) {
       <label>Nom <input type="text" name="last_name" autocomplete="family-name" /></label>
       <label>Téléphone <input type="tel" name="phone" autocomplete="tel" /></label>
       <p data-role="validation-error" class="error" hidden></p>
-      <p data-role="duplicate-warning" class="warning" hidden>
-        Ce numéro semble déjà avoir une commande cette saison.
-      </p>
+      <p data-role="duplicate-warning" class="warning" hidden></p>
       <div class="nav">
         <button type="button" data-role="prev">Précédent</button>
         <button type="submit" data-role="next" class="primary">Suivant</button>
@@ -92,8 +90,39 @@ async function handleNext(container, ctx) {
   }
 }
 
+// Resynchronise les champs depuis l'état à chaque passage sur cette étape :
+// sans ça, un changement d'état externe au formulaire (ex. "Recommencer",
+// .ai/decisions.md 2026-11-09) laissait les <input> afficher une ancienne
+// saisie alors que state.pii était déjà vide — le champ semblait prérempli
+// mais handleNext validait sur state.pii, pas sur le DOM, d'où le blocage.
+// Un numéro déjà utilisé cette saison ne peut pas être réutilisé pour
+// soumettre une 2e commande (dédoublonnage téléphone, .ai/decisions.md,
+// rejeté par le serveur à la validation) : la modification d'une commande
+// déjà confirmée reste réservée à l'admin (dashboard, M-DASH5), jamais via
+// une resoumission publique — décision confirmée par l'utilisateur le
+// 2026-11-09 suite à un retour sur le bouton « Recommencer ».
+function duplicatePhoneMessage(state) {
+  const hasContact = typeof state.contact_phone === 'string' && state.contact_phone.trim().length > 0;
+  const contact = hasContact
+    ? ` Pour la modifier, contactez-nous au ${state.contact_phone}.`
+    : ' Pour la modifier, contactez-nous directement.';
+  return `Ce numéro semble déjà avoir une commande cette saison.${contact}`;
+}
+
 function render(container, state) {
-  container.querySelector('[data-role="duplicate-warning"]').hidden = !state.phoneDuplicateWarning;
+  const form = container.querySelector('[data-role="form"]');
+  for (const field of ['first_name', 'last_name', 'phone']) {
+    const input = form.elements[field];
+    const value = state.pii[field] || '';
+    if (document.activeElement !== input && input.value !== value) {
+      input.value = value;
+    }
+  }
+  const warningEl = container.querySelector('[data-role="duplicate-warning"]');
+  warningEl.hidden = !state.phoneDuplicateWarning;
+  if (state.phoneDuplicateWarning) {
+    warningEl.textContent = duplicatePhoneMessage(state);
+  }
 }
 
 export { init, render, validateClientSide };

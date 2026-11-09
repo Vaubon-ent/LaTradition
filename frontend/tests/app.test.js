@@ -7,7 +7,7 @@ import { DRAFT_KEY } from '../js/draft.js';
 function setupDom() {
   document.body.innerHTML = `
     <div id="app">
-      <header><p id="progress"></p><button type="button" id="restart" hidden>Recommencer</button></header>
+      <header><p id="progress"></p></header>
       <main>
         <section id="step-1" class="step"></section>
         <section id="step-2" class="step"></section>
@@ -15,6 +15,7 @@ function setupDom() {
         <section id="step-4" class="step"></section>
         <section id="step-5" class="step"></section>
       </main>
+      <button type="button" id="restart" hidden>Recommencer</button>
     </div>
   `;
 }
@@ -222,7 +223,13 @@ describe('étape PII — check-phone (F4)', () => {
     await flush();
 
     expect(document.getElementById('step-4').hidden).toBe(false);
-    expect(document.querySelector('#step-3 [data-role="duplicate-warning"]').hidden).toBe(false);
+    const warningEl = document.querySelector('#step-3 [data-role="duplicate-warning"]');
+    expect(warningEl.hidden).toBe(false);
+    // Retour utilisateur du 2026-11-09 : la modification d'une commande déjà
+    // confirmée reste réservée à l'admin, jamais une resoumission publique —
+    // le message doit orienter vers un contact plutôt que suggérer de
+    // réessayer avec le même numéro.
+    expect(warningEl.textContent).toContain('contactez-nous');
   });
 
   it("ne bloque jamais la navigation si l'appel check-phone échoue", async () => {
@@ -268,7 +275,7 @@ describe('soumission de commande et brouillon (F5/F6/F7)', () => {
     expect(localStorage.getItem(DRAFT_KEY)).toBeNull();
   });
 
-  it('conserve la saisie et le brouillon si la soumission échoue', async () => {
+  it('conserve la saisie et le brouillon si la soumission échoue, et redirige vers l\'admin pour un doublon (409)', async () => {
     mockFetchDefault({ orderFails: true });
     await loadApp();
     await fillUpToRecap();
@@ -278,7 +285,13 @@ describe('soumission de commande et brouillon (F5/F6/F7)', () => {
     await flush();
 
     expect(document.getElementById('step-4').hidden).toBe(false);
-    expect(document.querySelector('#step-4 [data-role="error"]').hidden).toBe(false);
+    const errorEl = document.querySelector('#step-4 [data-role="error"]');
+    expect(errorEl.hidden).toBe(false);
+    // Retour utilisateur du 2026-11-09 : sur un 409 (doublon téléphone), le
+    // message doit orienter vers l'admin plutôt que montrer l'erreur serveur
+    // brute ("Commande déjà existante.") — pas de resoumission publique.
+    expect(errorEl.textContent).toContain('Contactez-nous');
+    expect(errorEl.textContent).not.toContain('Commande déjà existante');
     expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
     const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
     expect(draft.pii.first_name).toBe('Jean');
@@ -321,37 +334,59 @@ describe('carte Récapitulatif — estimation façon ticket de caisse (M-FR2)', 
 });
 
 describe('bouton Recommencer (M-FR5)', () => {
-  it("n'est pas visible à l'étape 1", async () => {
+  async function reachConfirmation() {
+    await goToPii();
+    const form = document.querySelector('#step-3 [data-role="form"]');
+    fireInput(form.elements.first_name, 'Jean');
+    fireInput(form.elements.last_name, 'Dupont');
+    fireInput(form.elements.phone, '0612345678');
+    document.querySelector('#step-3 [data-role="next"]').click();
+    await flush();
+    await flush();
+    document.querySelector('#step-4 [data-role="submit"]').click();
+    await flush();
+    await flush();
+  }
+
+  it("reste masqué aux étapes 1 à 4 (le bouton Précédent de chaque étape couvre déjà le retour en arrière)", async () => {
     mockFetchDefault();
     await loadApp();
     expect(document.getElementById('restart').hidden).toBe(true);
-  });
 
-  it("est visible dès l'étape 2 et n'efface rien si la confirmation est annulée", async () => {
-    mockFetchDefault();
-    await loadApp();
     document.querySelector('#step-1 [data-role="start"]').click();
     await flush();
     await flush();
+    expect(document.getElementById('restart').hidden).toBe(true);
+
     document.querySelector('#step-2 [data-role="inc"]').click();
     await flush();
+    document.querySelector('#step-2 [data-role="next"]').click();
+    await flush();
+    expect(document.getElementById('restart').hidden).toBe(true);
 
+    document.querySelector('#step-3 [data-role="form"]').elements.first_name.value;
+    expect(document.getElementById('restart').hidden).toBe(true);
+  });
+
+  it("devient visible à l'étape 5 (Confirmation) et n'efface rien si la confirmation est annulée", async () => {
+    mockFetchDefault();
+    await loadApp();
+    await reachConfirmation();
+
+    expect(document.getElementById('step-5').hidden).toBe(false);
     expect(document.getElementById('restart').hidden).toBe(false);
 
     vi.spyOn(window, 'confirm').mockReturnValue(false);
     document.getElementById('restart').click();
     await flush();
 
-    expect(document.getElementById('step-2').hidden).toBe(false);
-    expect(document.querySelector('#step-2 [data-role="qty"]').value).toBe('1');
+    expect(document.getElementById('step-5').hidden).toBe(false);
   });
 
   it('réinitialise état, étape et brouillon quand la confirmation est acceptée, et recommence à sauvegarder ensuite', async () => {
     mockFetchDefault();
     await loadApp();
-    await goToPii();
-    const form = document.querySelector('#step-3 [data-role="form"]');
-    fireInput(form.elements.first_name, 'Jean');
+    await reachConfirmation();
 
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     document.getElementById('restart').click();
@@ -373,6 +408,38 @@ describe('bouton Recommencer (M-FR5)', () => {
     await flush();
     expect(localStorage.getItem(DRAFT_KEY)).not.toBeNull();
   });
+
+  it("ne laisse pas de saisie PII fantôme dans le DOM après Recommencer (bug signalé le 2026-11-09)", async () => {
+    mockFetchDefault();
+    await loadApp();
+    await reachConfirmation();
+
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    document.getElementById('restart').click();
+    await flush();
+    await flush();
+
+    // On revient sur l'étape Coordonnées : le DOM doit refléter l'état vidé,
+    // pas l'ancienne saisie ("Jean"/"Dupont"/le téléphone précédent).
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+    document.querySelector('#step-2 [data-role="inc"]').click();
+    await flush();
+    document.querySelector('#step-2 [data-role="next"]').click();
+    await flush();
+
+    const form = document.querySelector('#step-3 [data-role="form"]');
+    expect(form.elements.first_name.value).toBe('');
+    expect(form.elements.last_name.value).toBe('');
+    expect(form.elements.phone.value).toBe('');
+
+    // Et la validation doit se comporter en conséquence : Suivant doit
+    // réclamer les champs, pas bloquer silencieusement sur un état fantôme.
+    document.querySelector('#step-3 [data-role="next"]').click();
+    await flush();
+    expect(document.querySelector('#step-3 [data-role="validation-error"]').hidden).toBe(false);
+  });
 });
 
 describe('responsive stepper/roulette — règles CSS présentes (M-FR3)', () => {
@@ -383,6 +450,16 @@ describe('responsive stepper/roulette — règles CSS présentes (M-FR3)', () =>
     expect(css).toMatch(/@media\s*\(min-width:\s*768px\)\s*\{[^}]*\.qty-wheel\s*\{[^}]*display:\s*none/s);
     expect(css).toMatch(
       /@media\s*\(max-width:\s*767\.98px\)\s*\{[\s\S]*?\.stepper button\[data-role="dec"\][\s\S]*?\.stepper button\[data-role="inc"\][\s\S]*?display:\s*none/
+    );
+  });
+
+  it("masque les flèches natives du champ de quantité, pc/tablette comme mobile (retour utilisateur du 2026-11-09)", () => {
+    const testDir = dirname(fileURLToPath(import.meta.url));
+    const css = readFileSync(join(testDir, '..', 'css', 'styles.css'), 'utf8');
+
+    expect(css).toMatch(/-moz-appearance:\s*textfield/);
+    expect(css).toMatch(
+      /::-webkit-outer-spin-button[\s\S]*?::-webkit-inner-spin-button[\s\S]*?\{[\s\S]*?-webkit-appearance:\s*none/
     );
   });
 });
