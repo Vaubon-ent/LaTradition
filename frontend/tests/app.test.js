@@ -296,6 +296,79 @@ describe('soumission de commande et brouillon (F5/F6/F7)', () => {
     expect(draft.pii.first_name).toBe('Jean');
     expect(draft.items.blanc).toBe(1);
   });
+
+  it('inclut l\'option choisie dans la commande envoyée au serveur (demande directe du 2026-11-10)', async () => {
+    mockFetchDefault();
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+    document.querySelector('#step-2 [data-role="inc"]').click();
+    fireChange(document.querySelector('#step-2 [data-role="option"]'), 'plus_piment');
+    await flush();
+    document.querySelector('#step-2 [data-role="next"]').click();
+    await flush();
+
+    const form = document.querySelector('#step-3 [data-role="form"]');
+    fireInput(form.elements.first_name, 'Jean');
+    fireInput(form.elements.last_name, 'Dupont');
+    fireInput(form.elements.phone, '0612345678');
+    document.querySelector('#step-3 [data-role="next"]').click();
+    await flush();
+    await flush();
+
+    document.querySelector('#step-4 [data-role="submit"]').click();
+    await flush();
+    await flush();
+
+    const [, requestOptions] = global.fetch.mock.calls.find(([url]) => url.includes('/api/orders'));
+    expect(JSON.parse(requestOptions.body).option).toBe('plus_piment');
+  });
+
+  it('persiste l\'option choisie dans le brouillon', async () => {
+    mockFetchDefault();
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+    fireChange(document.querySelector('#step-2 [data-role="option"]'), 'moins_piment');
+    await flush();
+
+    const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
+    expect(draft.option).toBe('moins_piment');
+  });
+});
+
+describe('étape Commande — ordre d\'affichage et option (demande directe du 2026-11-10)', () => {
+  it('affiche toujours les cartes produit dans l\'ordre noir, blanc, blanc morue, quel que soit l\'ordre renvoyé par l\'API', async () => {
+    mockFetchDefault({
+      products: [
+        { id: 'blanc', name: 'Boudin blanc', price_per_kg: 1000 },
+        { id: 'blanc_morue', name: 'Boudin blanc morue', price_per_kg: 1700 },
+        { id: 'noir', name: 'Boudin noir', price_per_kg: 1400 },
+      ],
+    });
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+
+    const cards = document.querySelectorAll('#step-2 .product-card');
+    expect([...cards].map((c) => c.dataset.productId)).toEqual(['noir', 'blanc', 'blanc_morue']);
+  });
+
+  it('affiche une liste déroulante Option sous la dernière carte, avec 3 valeurs', async () => {
+    mockFetchDefault();
+    await loadApp();
+    document.querySelector('#step-1 [data-role="start"]').click();
+    await flush();
+    await flush();
+
+    const select = document.querySelector('#step-2 [data-role="option"]');
+    expect(select).not.toBeNull();
+    const values = [...select.options].map((o) => o.value);
+    expect(values).toEqual(['', 'plus_piment', 'moins_piment']);
+  });
 });
 
 describe('carte Récapitulatif — estimation façon ticket de caisse (M-FR2)', () => {

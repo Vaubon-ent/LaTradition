@@ -64,10 +64,10 @@ describe('POST /api/orders', () => {
     expect(res.status).toBe(400);
   });
 
-  it('rejette une commande après la date limite (verrouillée)', async () => {
+  it('rejette une commande après la date limite (verrouillée) — order_deadline, pas conception_date', async () => {
     const built = buildTestApp();
     db = built.db;
-    setSetting(db, 'conception_date', '2000-01-10');
+    setSetting(db, 'order_deadline', '2000-01-10');
     const nonce = await getNonce(built.app);
 
     const res = await request(built.app)
@@ -75,6 +75,19 @@ describe('POST /api/orders', () => {
       .send({ ...validOrder(), nonce });
 
     expect(res.status).toBe(403);
+  });
+
+  it('n\'est jamais verrouillée du seul fait que conception_date soit dans le passé : seule order_deadline compte', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    setSetting(db, 'conception_date', '2000-01-10'); // order_deadline (seed) reste dans le futur
+    const nonce = await getNonce(built.app);
+
+    const res = await request(built.app)
+      .post('/api/orders')
+      .send({ ...validOrder(), nonce });
+
+    expect(res.status).toBe(201);
   });
 
   it('rejette une requête sans nonce ou avec un nonce invalide', async () => {
@@ -129,6 +142,46 @@ describe('POST /api/orders', () => {
       .post('/api/orders')
       .send({ ...validOrder(), phone: '06 99 99 99 99', nonce: nonce2 }); // même nonce, téléphone corrigé
     expect(retry.status).toBe(201);
+  });
+
+  it('option absente : enregistrée comme chaîne vide (aucune préférence)', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const nonce = await getNonce(built.app);
+
+    const res = await request(built.app)
+      .post('/api/orders')
+      .send({ ...validOrder(), nonce });
+
+    expect(res.status).toBe(201);
+    const order = db.prepare('SELECT option FROM orders').get();
+    expect(order.option).toBe('');
+  });
+
+  it('option valide (plus_piment) : enregistrée telle quelle', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const nonce = await getNonce(built.app);
+
+    const res = await request(built.app)
+      .post('/api/orders')
+      .send({ ...validOrder(), option: 'plus_piment', nonce });
+
+    expect(res.status).toBe(201);
+    const order = db.prepare('SELECT option FROM orders').get();
+    expect(order.option).toBe('plus_piment');
+  });
+
+  it('rejette une option invalide', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const nonce = await getNonce(built.app);
+
+    const res = await request(built.app)
+      .post('/api/orders')
+      .send({ ...validOrder(), option: 'extra_sel', nonce });
+
+    expect(res.status).toBe(400);
   });
 
   it('fige le prix unitaire dans order_items : une modification ultérieure du prix ne change pas la commande déjà passée', async () => {

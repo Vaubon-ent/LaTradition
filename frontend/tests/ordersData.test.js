@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
   PRODUCT_COLUMNS,
+  OPTION_LABELS,
+  optionLabel,
+  PAID_STATUS_LABELS,
+  paidStatusLabel,
+  pickedUpLabel,
   kgForProduct,
-  isPaid,
-  isPickedUp,
-  statusAfterPaidToggle,
-  statusAfterPickedUpToggle,
   formatDate,
   formatKg,
   formatEuros,
@@ -27,6 +28,9 @@ function makeOrder(overrides = {}) {
     last_name: 'Dupont',
     phone: '0612345678',
     total_cents: 1000,
+    option: '',
+    paid_status: 'en_attente',
+    picked_up: 0,
     items: [],
     ...overrides,
   };
@@ -50,51 +54,19 @@ describe('ordersData.kgForProduct', () => {
   });
 });
 
-describe('ordersData.isPaid / isPickedUp', () => {
-  it.each([
-    ['recue', false, false],
-    ['payee', true, false],
-    ['retiree', true, true],
-  ])('status=%s → payé=%s, récupéré=%s', (status, paid, pickedUp) => {
-    expect(isPaid(status)).toBe(paid);
-    expect(isPickedUp(status)).toBe(pickedUp);
+describe('ordersData.paidStatusLabel / pickedUpLabel (découplage du 2026-11-10)', () => {
+  it('traduit chaque valeur de paid_status en libellé affiché', () => {
+    expect(paidStatusLabel('non')).toBe('Non');
+    expect(paidStatusLabel('en_attente')).toBe('En attente');
+    expect(paidStatusLabel('oui')).toBe('Oui');
+    expect(PAID_STATUS_LABELS.en_attente).toBe('En attente');
   });
-});
 
-describe('ordersData.statusAfterPaidToggle', () => {
-  it('cocher Payé depuis recue → payee', () => {
-    expect(statusAfterPaidToggle('recue', true)).toBe('payee');
-  });
-  it('cocher Payé alors que déjà payee → no-op', () => {
-    expect(statusAfterPaidToggle('payee', true)).toBe('payee');
-  });
-  it('cocher Payé alors que déjà retiree → no-op (case désactivée côté vue)', () => {
-    expect(statusAfterPaidToggle('retiree', true)).toBe('retiree');
-  });
-  it('décocher Payé depuis payee → recue', () => {
-    expect(statusAfterPaidToggle('payee', false)).toBe('recue');
-  });
-  it('décocher Payé alors que déjà recue → no-op', () => {
-    expect(statusAfterPaidToggle('recue', false)).toBe('recue');
-  });
-  it('décocher Payé depuis retiree → no-op (case désactivée côté vue)', () => {
-    expect(statusAfterPaidToggle('retiree', false)).toBe('retiree');
-  });
-});
-
-describe('ordersData.statusAfterPickedUpToggle', () => {
-  it('cocher Récupéré depuis recue → retiree (implique payé)', () => {
-    expect(statusAfterPickedUpToggle('recue', true)).toBe('retiree');
-  });
-  it('cocher Récupéré depuis payee → retiree', () => {
-    expect(statusAfterPickedUpToggle('payee', true)).toBe('retiree');
-  });
-  it('décocher Récupéré depuis retiree → payee (reste payé)', () => {
-    expect(statusAfterPickedUpToggle('retiree', false)).toBe('payee');
-  });
-  it('décocher Récupéré alors que déjà non récupéré → no-op', () => {
-    expect(statusAfterPickedUpToggle('recue', false)).toBe('recue');
-    expect(statusAfterPickedUpToggle('payee', false)).toBe('payee');
+  it('traduit picked_up (booléen/0-1) en Oui/Non', () => {
+    expect(pickedUpLabel(true)).toBe('Oui');
+    expect(pickedUpLabel(1)).toBe('Oui');
+    expect(pickedUpLabel(false)).toBe('Non');
+    expect(pickedUpLabel(0)).toBe('Non');
   });
 });
 
@@ -116,7 +88,8 @@ describe('ordersData.formatDate / formatKg', () => {
 
 describe('ordersData.matchesFilters', () => {
   const order = makeOrder({
-    status: 'payee',
+    paid_status: 'oui',
+    picked_up: 0,
     items: [{ product_id: 'noir', quantity_500g: 3 }],
   });
   const noFilters = { last_name: '', first_name: '', phone: '', created_at: '', kg: {}, paid: 'all', pickedUp: 'all' };
@@ -140,9 +113,10 @@ describe('ordersData.matchesFilters', () => {
     expect(matchesFilters(order, { ...noFilters, kg: { noir: '9' } })).toBe(false);
   });
 
-  it('filtre payé (tous/oui/non)', () => {
-    expect(matchesFilters(order, { ...noFilters, paid: 'yes' })).toBe(true);
-    expect(matchesFilters(order, { ...noFilters, paid: 'no' })).toBe(false);
+  it('filtre payé (tous/non/en_attente/oui), découplage du 2026-11-10', () => {
+    expect(matchesFilters(order, { ...noFilters, paid: 'oui' })).toBe(true);
+    expect(matchesFilters(order, { ...noFilters, paid: 'non' })).toBe(false);
+    expect(matchesFilters(order, { ...noFilters, paid: 'en_attente' })).toBe(false);
   });
 
   it('filtre récupéré (tous/oui/non)', () => {
@@ -150,15 +124,38 @@ describe('ordersData.matchesFilters', () => {
     expect(matchesFilters(order, { ...noFilters, pickedUp: 'yes' })).toBe(false);
   });
 
+  it('une commande peut être récupérée sans être payée (découplage du 2026-11-10)', () => {
+    const pickedUpUnpaid = makeOrder({ paid_status: 'non', picked_up: 1 });
+    expect(matchesFilters(pickedUpUnpaid, { ...noFilters, paid: 'non', pickedUp: 'yes' })).toBe(true);
+  });
+
   it('plusieurs filtres combinés (tous doivent correspondre)', () => {
-    expect(matchesFilters(order, { ...noFilters, last_name: 'dup', paid: 'yes', pickedUp: 'no' })).toBe(true);
-    expect(matchesFilters(order, { ...noFilters, last_name: 'dup', paid: 'yes', pickedUp: 'yes' })).toBe(false);
+    expect(matchesFilters(order, { ...noFilters, last_name: 'dup', paid: 'oui', pickedUp: 'no' })).toBe(true);
+    expect(matchesFilters(order, { ...noFilters, last_name: 'dup', paid: 'oui', pickedUp: 'yes' })).toBe(false);
+  });
+
+  it('filtre option (tous/aucune/plus_piment/moins_piment), demande directe du 2026-11-10', () => {
+    const withOption = makeOrder({ option: 'plus_piment' });
+    expect(matchesFilters(withOption, { ...noFilters, option: 'all' })).toBe(true);
+    expect(matchesFilters(withOption, { ...noFilters, option: 'plus_piment' })).toBe(true);
+    expect(matchesFilters(withOption, { ...noFilters, option: 'moins_piment' })).toBe(false);
+    expect(matchesFilters(withOption, { ...noFilters, option: '' })).toBe(false);
+    expect(matchesFilters(order, { ...noFilters, option: '' })).toBe(true); // order a option: ''
   });
 });
 
 describe('ordersData.PRODUCT_COLUMNS', () => {
   it('expose les 3 types de boudin dans le bon ordre', () => {
     expect(PRODUCT_COLUMNS.map((c) => c.id)).toEqual(['noir', 'blanc', 'blanc_morue']);
+  });
+});
+
+describe('ordersData.optionLabel / OPTION_LABELS', () => {
+  it('traduit chaque valeur stockée en libellé affiché', () => {
+    expect(optionLabel('')).toBe('');
+    expect(optionLabel('plus_piment')).toBe('Plus de piment');
+    expect(optionLabel('moins_piment')).toBe('Moins de piment');
+    expect(OPTION_LABELS.plus_piment).toBe('Plus de piment');
   });
 });
 
@@ -194,14 +191,23 @@ describe('ordersData.sortOrders', () => {
     expect(sortOrders([expensive, cheap, mid], { column: 'total_cents', direction: 'desc' }).map((o) => o.id)).toEqual([3, 2, 1]);
   });
 
-  it('tri sur payé/récupéré (booléen dérivé du statut, non-payé/non-récupéré avant)', () => {
-    const recue = makeOrder({ id: 1, status: 'recue' });
-    const payee = makeOrder({ id: 2, status: 'payee' });
-    const retiree = makeOrder({ id: 3, status: 'retiree' });
-    // "payé" : recue (non payé) doit passer avant payee/retiree (payés).
-    expect(sortOrders([retiree, recue, payee], { column: 'paid', direction: 'asc' })[0].id).toBe(1);
-    // "récupéré" : seul retiree est récupéré, doit passer en dernier.
-    expect(sortOrders([retiree, recue, payee], { column: 'pickedUp', direction: 'asc' }).at(-1).id).toBe(3);
+  it('tri sur payé (3 états, ordre non < en_attente < oui) et récupéré (découplage du 2026-11-10)', () => {
+    const non = makeOrder({ id: 1, paid_status: 'non' });
+    const enAttente = makeOrder({ id: 2, paid_status: 'en_attente' });
+    const oui = makeOrder({ id: 3, paid_status: 'oui' });
+    expect(sortOrders([oui, non, enAttente], { column: 'paid', direction: 'asc' }).map((o) => o.id)).toEqual([1, 2, 3]);
+
+    const notPickedUp = makeOrder({ id: 1, picked_up: 0 });
+    const pickedUp = makeOrder({ id: 2, picked_up: 1 });
+    expect(sortOrders([pickedUp, notPickedUp], { column: 'pickedUp', direction: 'asc' })[0].id).toBe(1);
+  });
+
+  it('tri croissant sur le libellé Option (demande directe du 2026-11-10)', () => {
+    const none = makeOrder({ id: 1, option: '' });
+    const plus = makeOrder({ id: 2, option: 'plus_piment' });
+    const moins = makeOrder({ id: 3, option: 'moins_piment' });
+    // ordre alphabétique des libellés : '' < 'Moins de piment' < 'Plus de piment'
+    expect(sortOrders([plus, moins, none], { column: 'option', direction: 'asc' }).map((o) => o.id)).toEqual([1, 3, 2]);
   });
 
   it('ne modifie pas le tableau d\'origine (immutabilité)', () => {

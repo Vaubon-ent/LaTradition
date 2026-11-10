@@ -58,6 +58,7 @@ async function handleSubmit(container, ctx) {
       phone: state.pii.phone,
       items,
       nonce: state.nonce,
+      option: state.option,
     });
     ctx.update((s) => setOrderResult(s, order));
     ctx.goNext();

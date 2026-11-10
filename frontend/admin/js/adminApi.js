@@ -79,6 +79,15 @@ function updateOrderStatus(id, status) {
   });
 }
 
+// Payé / Récupéré découplés (demande directe du 2026-11-10) : payload partiel
+// ({ paid_status } et/ou { picked_up }), chaque champ modifiable seul.
+function updateOrderPayment(id, payload) {
+  return adminFetch(`/api/admin/orders/${id}/payment`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
 function saveOrdersExport() {
   return adminFetch('/api/admin/export/save', { method: 'POST' });
 }
@@ -107,6 +116,7 @@ export {
   adminFetch,
   fetchOrders,
   updateOrderStatus,
+  updateOrderPayment,
   saveOrdersExport,
   updateOrder,
   deleteOrder,

@@ -11,7 +11,7 @@ describe('GET /api/settings/public', () => {
     db?.close();
   });
 
-  it('renvoie la date de conception, la date limite calculée, l’état de verrouillage et un nonce', async () => {
+  it('renvoie la date de conception, la date limite (saisie manuelle), l’état de verrouillage et un nonce', async () => {
     const built = buildTestApp();
     db = built.db;
 
@@ -83,19 +83,39 @@ describe('GET /api/settings/public', () => {
     expect(res.body.pickup_time).toBe('');
   });
 
-  it('renvoie locked: true quand la date limite est déjà passée', async () => {
+  it('renvoie locked: true quand la date limite (saisie manuelle) est déjà passée', async () => {
     const built = buildTestApp();
     db = built.db;
-    setSetting(db, 'conception_date', '2000-01-10'); // largement dans le passé
+    setSetting(db, 'order_deadline', '2000-01-10'); // largement dans le passé
 
     const res = await request(built.app).get('/api/settings/public');
 
     expect(res.body.locked).toBe(true);
   });
 
+  it('ne verrouille jamais du seul fait que conception_date soit dans le passé : seule order_deadline compte', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    setSetting(db, 'conception_date', '2000-01-10'); // order_deadline (seed) reste dans le futur
+
+    const res = await request(built.app).get('/api/settings/public');
+
+    expect(res.body.locked).toBe(false);
+  });
+
   it('renvoie une erreur 500 si conception_date n’est pas configurée', async () => {
     const built = buildTestApp({ withSeed: false });
     db = built.db;
+
+    const res = await request(built.app).get('/api/settings/public');
+
+    expect(res.status).toBe(500);
+  });
+
+  it('renvoie une erreur 500 si order_deadline n’est pas configurée', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    db.prepare("DELETE FROM settings WHERE key = 'order_deadline'").run();
 
     const res = await request(built.app).get('/api/settings/public');
 

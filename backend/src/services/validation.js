@@ -39,4 +39,25 @@ function validateCustomerInput(body = {}) {
   };
 }
 
-module.exports = { ValidationError, normalizePhone, validateName, validateCustomerInput };
+// Préférence libre sur une commande (demande directe du 2026-11-10), '' = aucune
+// préférence. Un seul champ par commande (pas par ligne de produit).
+const ORDER_OPTION_VALUES = ['', 'plus_piment', 'moins_piment'];
+
+function validateOrderOption(raw) {
+  if (raw === undefined || raw === null || raw === '') {
+    return '';
+  }
+  if (typeof raw !== 'string' || !ORDER_OPTION_VALUES.includes(raw)) {
+    throw new ValidationError('Option de commande invalide.');
+  }
+  return raw;
+}
+
+module.exports = {
+  ValidationError,
+  normalizePhone,
+  validateName,
+  validateCustomerInput,
+  ORDER_OPTION_VALUES,
+  validateOrderOption,
+};

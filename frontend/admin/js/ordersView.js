@@ -2,14 +2,13 @@
 // DOM construit entièrement ici (index.html ne fournit qu'un conteneur vide,
 // même pattern que le reste du socle admin).
 
-import { fetchOrders, updateOrderStatus, saveOrdersExport } from './adminApi.js';
+import { fetchOrders, updateOrderPayment, saveOrdersExport } from './adminApi.js';
 import {
   PRODUCT_COLUMNS,
+  OPTION_LABELS,
+  optionLabel,
+  PAID_STATUS_LABELS,
   kgForProduct,
-  isPaid,
-  isPickedUp,
-  statusAfterPaidToggle,
-  statusAfterPickedUpToggle,
   formatDate,
   formatKg,
   formatEuros,
@@ -27,6 +26,7 @@ const SORTABLE_COLUMNS = [
   ...PRODUCT_COLUMNS.map((c) => ({ key: c.id, label: `${c.label} (kg)` })),
   { key: 'total_cents', label: 'Montant (€)' },
   { key: 'created_at', label: 'Date de commande' },
+  { key: 'option', label: 'Option' },
   { key: 'paid', label: 'Payé' },
   { key: 'pickedUp', label: 'Récupéré' },
 ];
@@ -42,8 +42,9 @@ function emptyFilters() {
     phone: '',
     created_at: '',
     kg: PRODUCT_COLUMNS.reduce((acc, c) => ({ ...acc, [c.id]: '' }), {}),
-    paid: 'all',
-    pickedUp: 'all',
+    option: 'all',
+    paid: 'all', // 'all'|'non'|'en_attente'|'oui'
+    pickedUp: 'all', // 'all'|'yes'|'no'
   };
 }
 
@@ -73,6 +74,7 @@ function mount(root) {
           ${PRODUCT_COLUMNS.map((c) => `<th>${sortableHeader({ key: c.id, label: `${c.label} (kg)` })}</th>`).join('')}
           <th>${sortableHeader({ key: 'total_cents', label: 'Montant (€)' })}</th>
           <th>${sortableHeader({ key: 'created_at', label: 'Date de commande' })}</th>
+          <th class="col-option">${sortableHeader({ key: 'option', label: 'Option' })}</th>
           <th class="col-paid">${sortableHeader({ key: 'paid', label: 'Payé' })}</th>
           <th class="col-pickedup">${sortableHeader({ key: 'pickedUp', label: 'Récupéré' })}</th>
           <th>Actions</th>
@@ -86,11 +88,20 @@ function mount(root) {
           ).join('')}
           <th></th>
           <th><input type="text" data-filter="created_at" aria-label="Filtrer par date" /></th>
+          <th class="col-option">
+            <select data-filter="option" aria-label="Filtrer par option">
+              <option value="all">Tous</option>
+              <option value="">Aucune</option>
+              <option value="plus_piment">${OPTION_LABELS.plus_piment}</option>
+              <option value="moins_piment">${OPTION_LABELS.moins_piment}</option>
+            </select>
+          </th>
           <th class="col-paid">
             <select data-filter="paid" aria-label="Filtrer par payé">
               <option value="all">Tous</option>
-              <option value="yes">Oui</option>
-              <option value="no">Non</option>
+              <option value="non">${PAID_STATUS_LABELS.non}</option>
+              <option value="en_attente">${PAID_STATUS_LABELS.en_attente}</option>
+              <option value="oui">${PAID_STATUS_LABELS.oui}</option>
             </select>
           </th>
           <th class="col-pickedup">
@@ -114,14 +125,39 @@ function mount(root) {
 
   // Totaux des commandes affichées (filtrées), pas forcément de toute la
   // saison — pour que filtrer (ex. "non payé") donne aussi des sous-totaux
-  // utiles (demande utilisateur du 2026-11-08).
+  // utiles (demande utilisateur du 2026-11-08). Présentation en tuiles
+  // (Option B proposée le 2026-11-10, choisie par l'utilisateur) : deux
+  // tuiles "gros chiffre" pour ce qui compte le plus au premier coup d'œil
+  // (nombre de commandes, montant), puis le détail kg par type + le total
+  // dans un groupe de tuiles plus discret.
   function renderSummary(visible) {
     const totals = computeTotals(visible);
     summaryEl.innerHTML = `
-      <strong>${totals.count}</strong> commande${totals.count === 1 ? '' : 's'}
-      · Montant total : <strong>${formatEuros(totals.amountCents)} €</strong>
-      ${PRODUCT_COLUMNS.map((c) => `· ${c.label} : <strong>${formatKg(totals.kgByProduct[c.id])} kg</strong>`).join(' ')}
-      · Total (tous types) : <strong>${formatKg(totals.kgTotal)} kg</strong>
+      <div class="tile-grid">
+        <div class="tile headline">
+          <span class="label">Commande${totals.count === 1 ? '' : 's'}</span>
+          <span class="value">${totals.count}</span>
+        </div>
+        <div class="tile headline">
+          <span class="label">Montant total</span>
+          <span class="value">${formatEuros(totals.amountCents)} €</span>
+        </div>
+      </div>
+      <div class="sr-group-label">Kg par type de boudin</div>
+      <div class="tile-sub-grid">
+        ${PRODUCT_COLUMNS.map(
+          (c) => `
+          <div class="tile-sub">
+            <span class="label">${c.label}</span>
+            <span class="value">${formatKg(totals.kgByProduct[c.id])} kg</span>
+          </div>
+        `
+        ).join('')}
+        <div class="tile-sub total">
+          <span class="label">Total (tous types)</span>
+          <span class="value">${formatKg(totals.kgTotal)} kg</span>
+        </div>
+      </div>
     `;
   }
 
@@ -142,8 +178,7 @@ function mount(root) {
     renderSummary(visible);
     tbody.innerHTML = visible
       .map((order) => {
-        const paid = isPaid(order.status);
-        const pickedUp = isPickedUp(order.status);
+        const pickedUp = Boolean(order.picked_up);
         return `
       <tr data-order-id="${order.id}">
         <td>${order.last_name}</td>
@@ -152,12 +187,20 @@ function mount(root) {
         ${PRODUCT_COLUMNS.map((c) => `<td>${formatKg(kgForProduct(order, c.id))}</td>`).join('')}
         <td>${formatEuros(order.total_cents)} €</td>
         <td>${formatDate(order.created_at)}</td>
+        <td>${optionLabel(order.option)}</td>
         <td>
-          <input type="checkbox" data-role="paid-checkbox" data-order-id="${order.id}" ${paid ? 'checked' : ''} ${pickedUp ? 'disabled' : ''} />
+          <select data-role="paid-select" data-order-id="${order.id}">
+            <option value="non" ${order.paid_status === 'non' ? 'selected' : ''}>${PAID_STATUS_LABELS.non}</option>
+            <option value="en_attente" ${order.paid_status === 'en_attente' ? 'selected' : ''}>${PAID_STATUS_LABELS.en_attente}</option>
+            <option value="oui" ${order.paid_status === 'oui' ? 'selected' : ''}>${PAID_STATUS_LABELS.oui}</option>
+          </select>
           <span class="row-error" data-role="paid-error" hidden></span>
         </td>
         <td>
-          <input type="checkbox" data-role="pickedup-checkbox" data-order-id="${order.id}" ${pickedUp ? 'checked' : ''} />
+          <select data-role="pickedup-select" data-order-id="${order.id}">
+            <option value="non" ${!pickedUp ? 'selected' : ''}>Non</option>
+            <option value="oui" ${pickedUp ? 'selected' : ''}>Oui</option>
+          </select>
           <span class="row-error" data-role="pickedup-error" hidden></span>
         </td>
         <td><button type="button" data-role="edit-order" data-order-id="${order.id}">Modifier</button></td>
@@ -195,32 +238,53 @@ function mount(root) {
     renderRows();
   });
 
-  async function handleStatusChange(orderId, checkbox, toggleFn, errorSelector) {
+  // Payé / Récupéré découplés (demande directe du 2026-11-10) : deux
+  // gestionnaires indépendants, aucune règle de transition entre eux
+  // (contrairement à l'ancien handleStatusChange basé sur orders.status).
+  async function handlePaidStatusChange(orderId, selectEl) {
     const order = orders.find((o) => String(o.id) === String(orderId));
     if (!order) return;
-    const newStatus = toggleFn(order.status, checkbox.checked);
-    if (newStatus === order.status) return;
+    const newValue = selectEl.value;
+    if (newValue === order.paid_status) return;
 
     try {
-      await updateOrderStatus(orderId, newStatus);
-      order.status = newStatus;
+      await updateOrderPayment(orderId, { paid_status: newValue });
+      order.paid_status = newValue;
       renderRows();
-    } catch (err) {
-      checkbox.checked = !checkbox.checked;
-      const errorEl = checkbox.closest('tr').querySelector(errorSelector);
+    } catch {
+      selectEl.value = order.paid_status;
+      const errorEl = selectEl.closest('tr').querySelector('[data-role="paid-error"]');
+      errorEl.hidden = false;
+      errorEl.textContent = 'Échec de la mise à jour.';
+    }
+  }
+
+  async function handlePickedUpChange(orderId, selectEl) {
+    const order = orders.find((o) => String(o.id) === String(orderId));
+    if (!order) return;
+    const newValue = selectEl.value === 'oui';
+    if (newValue === Boolean(order.picked_up)) return;
+
+    try {
+      await updateOrderPayment(orderId, { picked_up: newValue });
+      order.picked_up = newValue ? 1 : 0;
+      renderRows();
+    } catch {
+      selectEl.value = order.picked_up ? 'oui' : 'non';
+      const errorEl = selectEl.closest('tr').querySelector('[data-role="pickedup-error"]');
       errorEl.hidden = false;
       errorEl.textContent = 'Échec de la mise à jour.';
     }
   }
 
   // Délégation sur tbody : les lignes sont reconstruites à chaque filtrage
-  // ou changement de statut, un listener par case serait perdu à chaque fois.
+  // ou changement de paiement, un listener par ligne serait perdu à chaque fois.
   tbody.addEventListener('change', (event) => {
     const target = event.target;
-    if (target.matches('[data-role="paid-checkbox"]')) {
-      handleStatusChange(target.dataset.orderId, target, statusAfterPaidToggle, '[data-role="paid-error"]');
-    } else if (target.matches('[data-role="pickedup-checkbox"]')) {
-      handleStatusChange(target.dataset.orderId, target, statusAfterPickedUpToggle, '[data-role="pickedup-error"]');
+    if (target.matches('[data-role="paid-select"]')) {
+      handlePaidStatusChange(target.dataset.orderId, target);
+    } else if (target.matches('[data-role="pickedup-select"]')) {
+      handlePickedUpChange(target.dataset.orderId, target);
     }
   });
 

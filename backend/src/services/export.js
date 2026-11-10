@@ -15,8 +15,16 @@ const COLUMNS = [
   { header: 'Quantité (unités 500 g)', key: 'quantity_500g' },
   { header: 'Quantité (g)', key: 'quantity_g' },
   { header: 'Total ligne (€)', key: 'line_total_euros' },
-  { header: 'Statut', key: 'status' },
+  { header: 'Payé', key: 'paid' },
+  { header: 'Récupéré', key: 'picked_up' },
 ];
+
+// Payé / Récupéré découplés (demande directe du 2026-11-10, .ai/decisions.md
+// — revient sur l'Option A du 2026-11-08) : remplace l'ancienne colonne
+// unique « Statut » (orders.status), qui ne serait plus jamais mise à jour
+// par le dashboard depuis le découplage et deviendrait donc silencieusement
+// fausse dans cet export réellement utilisé en production.
+const PAID_STATUS_LABELS = { non: 'Non', en_attente: 'En attente', oui: 'Oui' };
 
 // Une ligne par produit commandé (CDC §6.5 : "produit, quantité... total"),
 // pas une ligne par commande — une commande à plusieurs produits donne
@@ -24,7 +32,7 @@ const COLUMNS = [
 function buildExportRows(db, season) {
   const rows = db
     .prepare(
-      `SELECT orders.created_at, orders.status,
+      `SELECT orders.created_at, orders.paid_status, orders.picked_up,
               customers.first_name, customers.last_name, customers.phone,
               products.name AS product_name,
               order_items.quantity_500g, order_items.line_total_cents
@@ -46,7 +54,8 @@ function buildExportRows(db, season) {
     quantity_500g: row.quantity_500g,
     quantity_g: row.quantity_500g * 500,
     line_total_euros: row.line_total_cents / 100,
-    status: row.status,
+    paid: PAID_STATUS_LABELS[row.paid_status] ?? row.paid_status,
+    picked_up: row.picked_up ? 'Oui' : 'Non',
   }));
 }
 

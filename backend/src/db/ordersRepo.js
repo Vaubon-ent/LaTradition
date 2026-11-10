@@ -15,9 +15,9 @@ class DuplicateOrderError extends Error {}
 // Révisé le 2026-11-09 (bug P0, audit UX) : auparavant consommé en amont, dans
 // `middleware/antiAbuseGuard.js`, avant même de savoir si la commande serait
 // créée.
-function createOrder(db, { customerId, season, lines, totalCents, nonceInfo }) {
+function createOrder(db, { customerId, season, lines, totalCents, nonceInfo, option = '' }) {
   const insertOrder = db.prepare(
-    'INSERT INTO orders (customer_id, season, total_cents) VALUES (@customerId, @season, @totalCents)'
+    'INSERT INTO orders (customer_id, season, total_cents, option) VALUES (@customerId, @season, @totalCents, @option)'
   );
   const insertItem = db.prepare(
     `INSERT INTO order_items (order_id, product_id, quantity_500g, unit_price_cents, line_total_cents)
@@ -31,7 +31,7 @@ function createOrder(db, { customerId, season, lines, totalCents, nonceInfo }) {
 
     let orderId;
     try {
-      const result = insertOrder.run({ customerId, season, totalCents });
+      const result = insertOrder.run({ customerId, season, totalCents, option });
       orderId = result.lastInsertRowid;
     } catch (err) {
       throw new DuplicateOrderError('Une commande existe déjà pour ce client sur cette saison.');
@@ -65,7 +65,7 @@ function hasOrderForSeason(db, customerId, season) {
 function listOrders(db, { status, season, search } = {}) {
   let sql = `
     SELECT orders.id, orders.season, orders.status, orders.total_cents, orders.paid_online,
-           orders.created_at, orders.updated_at,
+           orders.option, orders.paid_status, orders.picked_up, orders.created_at, orders.updated_at,
            customers.first_name, customers.last_name, customers.phone
     FROM orders
     JOIN customers ON customers.id = orders.customer_id
@@ -110,6 +110,35 @@ function updateOrderStatus(db, id, status) {
   const result = db
     .prepare("UPDATE orders SET status = ?, updated_at = datetime('now') WHERE id = ?")
     .run(status, id);
+  return result.changes > 0;
+}
+
+const PAID_STATUSES = ['non', 'en_attente', 'oui'];
+
+// Payé / Récupéré découplés (demande directe du 2026-11-10, .ai/decisions.md
+// — revient sur l'Option A du 2026-11-08) : deux champs indépendants, chacun
+// modifiable seul, sans aucune règle de transition entre eux (contrairement à
+// l'ancien `updateOrderStatus`/`status`, laissé inchangé pour compatibilité
+// avec le filtre `?status=` et l'export existants, mais plus jamais écrit par
+// le dashboard). `paid_status`/`picked_up` optionnels indépendamment : au
+// moins un des deux doit être fourni (validé par le routeur).
+function updateOrderPaymentState(db, id, { paid_status, picked_up } = {}) {
+  if (paid_status !== undefined && !PAID_STATUSES.includes(paid_status)) {
+    throw new Error(`Statut de paiement invalide : ${paid_status}`);
+  }
+  const sets = [];
+  const params = { id };
+  if (paid_status !== undefined) {
+    sets.push('paid_status = @paid_status');
+    params.paid_status = paid_status;
+  }
+  if (picked_up !== undefined) {
+    sets.push('picked_up = @picked_up');
+    params.picked_up = picked_up ? 1 : 0;
+  }
+  const result = db
+    .prepare(`UPDATE orders SET ${sets.join(', ')}, updated_at = datetime('now') WHERE id = @id`)
+    .run(params);
   return result.changes > 0;
 }
 
@@ -204,10 +233,12 @@ module.exports = {
   hasOrderForSeason,
   listOrders,
   updateOrderStatus,
+  updateOrderPaymentState,
   getOrderById,
   getOrderItemsForEdit,
   applyOrderEdit,
   deleteOrder,
   getProductionTotals,
   ORDER_STATUSES,
+  PAID_STATUSES,
 };

@@ -47,7 +47,8 @@ describe('services/export', () => {
       quantity_500g: 2,
       quantity_g: 1000,
       line_total_euros: 10,
-      status: 'recue',
+      paid: 'En attente', // paid_status par défaut d'une commande neuve (.ai/decisions.md 2026-11-10)
+      picked_up: 'Non',
     });
   });
 
@@ -75,7 +76,7 @@ describe('services/export', () => {
   });
 
   it('buildCsv échappe les valeurs contenant `;` ou des guillemets', () => {
-    const csv = buildCsv([{ created_at: 'x', first_name: 'Jean;Pierre', last_name: 'D"upont', phone: '', product_name: '', quantity_500g: 0, quantity_g: 0, line_total_euros: 0, status: '' }]);
+    const csv = buildCsv([{ created_at: 'x', first_name: 'Jean;Pierre', last_name: 'D"upont', phone: '', product_name: '', quantity_500g: 0, quantity_g: 0, line_total_euros: 0, paid: '', picked_up: '' }]);
     expect(csv).toContain('"Jean;Pierre"');
     expect(csv).toContain('"D""upont"');
   });

@@ -8,6 +8,7 @@ import {
   incrementProductQuantity,
   decrementProductQuantity,
   hasAnyQuantity,
+  setOption,
   toDraft,
   applyDraft,
   formatKgLabel,
@@ -71,14 +72,30 @@ describe('draft projection (F7)', () => {
     expect(draft.products).toBeUndefined();
   });
 
-  it('applyDraft restores step/pii/items without touching the rest', () => {
+  it('inclut l\'option de commande', () => {
+    const state = setOption(createInitialState(), 'plus_piment');
+    expect(toDraft(state).option).toBe('plus_piment');
+  });
+
+  it('applyDraft restores step/pii/items/option without touching the rest', () => {
     const state = { ...createInitialState(), nonce: 'keep-me', products: [{ id: 'x' }] };
-    const restored = applyDraft(state, { step: 3, pii: { first_name: 'Jean' }, items: { blanc: 1.5 } });
+    const restored = applyDraft(state, {
+      step: 3,
+      pii: { first_name: 'Jean' },
+      items: { blanc: 1.5 },
+      option: 'moins_piment',
+    });
     expect(restored.step).toBe(3);
     expect(restored.pii.first_name).toBe('Jean');
     expect(restored.items.blanc).toBe(1.5);
+    expect(restored.option).toBe('moins_piment');
     expect(restored.nonce).toBe('keep-me');
     expect(restored.products).toEqual([{ id: 'x' }]);
+  });
+
+  it('applyDraft défaut à une option vide quand absente du brouillon', () => {
+    const restored = applyDraft(createInitialState(), { step: 2, pii: {}, items: {} });
+    expect(restored.option).toBe('');
   });
 
   it('is a no-op when there is no draft', () => {

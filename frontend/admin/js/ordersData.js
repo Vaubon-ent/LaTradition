@@ -8,39 +8,44 @@ const PRODUCT_COLUMNS = [
   { id: 'blanc_morue', label: 'Blanc morue' },
 ];
 
+// Préférence libre par commande (demande directe du 2026-11-10), un seul
+// champ pour toute la commande. Réimplémenté ici en local (pas d'import
+// depuis frontend/js/) : les deux bundles front restent volontairement
+// indépendants, même convention que formatEuros ci-dessous.
+const OPTION_LABELS = {
+  '': '',
+  plus_piment: 'Plus de piment',
+  moins_piment: 'Moins de piment',
+};
+
+function optionLabel(option) {
+  return OPTION_LABELS[option] ?? '';
+}
+
 function kgForProduct(order, productId) {
   return order.items
     .filter((item) => item.product_id === productId)
     .reduce((total, item) => total + item.quantity_500g * 0.5, 0);
 }
 
-// Mapping payé/récupéré sur orders.status existant, sans migration de
-// schéma (Option A, décision retenue du 2026-11-08) : "récupéré" implique
-// toujours "payé" dans ce modèle.
-function isPaid(status) {
-  return status === 'payee' || status === 'retiree';
+// Payé / Récupéré découplés (demande directe du 2026-11-10) : deux champs
+// indépendants (`orders.paid_status`, `orders.picked_up`), plus aucun lien ni
+// règle de transition entre eux — revient sur l'Option A du 2026-11-08, qui
+// les mappait tous les deux sur `orders.status` ("récupéré" impliquait
+// toujours "payé"). Une commande peut désormais être récupérée sans être
+// payée (le père laisse parfois récupérer avant paiement).
+const PAID_STATUS_LABELS = {
+  non: 'Non',
+  en_attente: 'En attente',
+  oui: 'Oui',
+};
+
+function paidStatusLabel(paidStatus) {
+  return PAID_STATUS_LABELS[paidStatus] ?? '';
 }
 
-function isPickedUp(status) {
-  return status === 'retiree';
-}
-
-// Règle de transition actée en Decision-Gel du 2026-11-08. La case "Payé"
-// est désactivée côté vue tant que "Récupéré" est cochée (impossible de
-// représenter "récupéré mais pas payé") : décocher "Payé" depuis `retiree`
-// est donc un no-op défensif, jamais déclenché par l'UI dans cet état.
-function statusAfterPaidToggle(currentStatus, checked) {
-  if (checked) {
-    return currentStatus === 'recue' ? 'payee' : currentStatus;
-  }
-  return currentStatus === 'payee' ? 'recue' : currentStatus;
-}
-
-function statusAfterPickedUpToggle(currentStatus, checked) {
-  if (checked) {
-    return 'retiree';
-  }
-  return currentStatus === 'retiree' ? 'payee' : currentStatus;
+function pickedUpLabel(pickedUp) {
+  return pickedUp ? 'Oui' : 'Non';
 }
 
 function formatDate(createdAt) {
@@ -74,7 +79,8 @@ function matchesTriStateFilter(actual, filterValue) {
 }
 
 // filters : { last_name, first_name, phone, created_at, kg: { noir, blanc,
-// blanc_morue }, paid: 'all'|'yes'|'no', pickedUp: 'all'|'yes'|'no' }
+// blanc_morue }, paid: 'all'|'non'|'en_attente'|'oui', pickedUp: 'all'|'yes'|'no',
+// option: 'all'|''|'plus_piment'|'moins_piment' }
 function matchesFilters(order, filters) {
   if (!includesFilter(order.last_name, filters.last_name)) return false;
   if (!includesFilter(order.first_name, filters.first_name)) return false;
@@ -86,11 +92,16 @@ function matchesFilters(order, filters) {
     if (kgFilter && !includesFilter(formatKg(kgForProduct(order, id)), kgFilter)) return false;
   }
 
-  if (!matchesTriStateFilter(isPaid(order.status), filters.paid)) return false;
-  if (!matchesTriStateFilter(isPickedUp(order.status), filters.pickedUp)) return false;
+  if (filters.paid !== undefined && filters.paid !== 'all' && order.paid_status !== filters.paid) return false;
+  if (!matchesTriStateFilter(Boolean(order.picked_up), filters.pickedUp)) return false;
+  if (filters.option !== undefined && filters.option !== 'all' && order.option !== filters.option) return false;
 
   return true;
 }
+
+// Ordre croissant naturel pour le statut de paiement à 3 états : non < en
+// attente < oui.
+const PAID_STATUS_ORDER = { non: 0, en_attente: 1, oui: 2 };
 
 const SORT_ACCESSORS = {
   last_name: (order) => order.last_name.toLowerCase(),
@@ -98,8 +109,9 @@ const SORT_ACCESSORS = {
   phone: (order) => order.phone,
   total_cents: (order) => order.total_cents,
   created_at: (order) => order.created_at,
-  paid: (order) => (isPaid(order.status) ? 1 : 0),
-  pickedUp: (order) => (isPickedUp(order.status) ? 1 : 0),
+  paid: (order) => PAID_STATUS_ORDER[order.paid_status] ?? 0,
+  pickedUp: (order) => (order.picked_up ? 1 : 0),
+  option: (order) => optionLabel(order.option),
 };
 for (const { id } of PRODUCT_COLUMNS) {
   SORT_ACCESSORS[id] = (order) => kgForProduct(order, id);
@@ -165,11 +177,12 @@ function computeTotals(orders) {
 
 export {
   PRODUCT_COLUMNS,
+  OPTION_LABELS,
+  optionLabel,
+  PAID_STATUS_LABELS,
+  paidStatusLabel,
+  pickedUpLabel,
   kgForProduct,
-  isPaid,
-  isPickedUp,
-  statusAfterPaidToggle,
-  statusAfterPickedUpToggle,
   formatDate,
   formatKg,
   formatEuros,

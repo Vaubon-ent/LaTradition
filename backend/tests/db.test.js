@@ -55,6 +55,104 @@ describe('migrate', () => {
   it('est idempotente (ré-exécution sans erreur)', () => {
     expect(() => migrate(db)).not.toThrow();
   });
+
+  it('ajoute la colonne orders.option (défaut \'\', ré-exécution idempotente)', () => {
+    const columns = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
+    expect(columns).toContain('option');
+
+    migrate(db); // ré-exécution : ne doit pas tenter un second ALTER TABLE (colonne déjà présente)
+    const columnsAfter = db.prepare('PRAGMA table_info(orders)').all().map((c) => c.name);
+    expect(columnsAfter.filter((name) => name === 'option')).toHaveLength(1);
+
+    const customerId = insertCustomer();
+    insertOrder(customerId);
+    expect(db.prepare('SELECT option FROM orders').get().option).toBe('');
+  });
+
+  it('rejette une valeur d\'option hors de la liste autorisée', () => {
+    const customerId = insertCustomer();
+    expect(() =>
+      db
+        .prepare('INSERT INTO orders (customer_id, season, total_cents, option) VALUES (?, ?, ?, ?)')
+        .run(customerId, '2026', 1000, 'extra_sel')
+    ).toThrow();
+  });
+
+  it('ajoute paid_status (défaut en_attente) et picked_up (défaut 0) pour une commande neuve', () => {
+    const customerId = insertCustomer();
+    insertOrder(customerId);
+    const order = db.prepare('SELECT paid_status, picked_up FROM orders').get();
+    expect(order.paid_status).toBe('en_attente');
+    expect(order.picked_up).toBe(0);
+  });
+
+  it('rejette un paid_status hors de la liste autorisée', () => {
+    const customerId = insertCustomer();
+    expect(() =>
+      db
+        .prepare('INSERT INTO orders (customer_id, season, total_cents, paid_status) VALUES (?, ?, ?, ?)')
+        .run(customerId, '2026', 1000, 'peut-etre')
+    ).toThrow();
+  });
+
+  it(
+    'backfill paid_status/picked_up depuis l\'ancien status au premier ajout des colonnes ' +
+      '(migration production, .ai/decisions.md 2026-11-10 — recue→non/0, payee→oui/0, retiree→oui/1)',
+    () => {
+      // Simule une base déjà en production, créée avant l'introduction de ces
+      // colonnes (uniquement les champs strictement nécessaires au test).
+      const legacyDb = getDb(':memory:');
+      legacyDb.exec(`
+        CREATE TABLE customers (id INTEGER PRIMARY KEY AUTOINCREMENT, first_name TEXT, last_name TEXT, phone TEXT UNIQUE);
+        CREATE TABLE orders (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_id INTEGER NOT NULL REFERENCES customers(id),
+          season TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'recue' CHECK (status IN ('recue', 'payee', 'retiree')),
+          total_cents INTEGER NOT NULL CHECK (total_cents >= 0),
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+      let phoneCounter = 0;
+      const insertLegacyOrder = (status) => {
+        phoneCounter += 1;
+        const customerId = legacyDb
+          .prepare('INSERT INTO customers (first_name, last_name, phone) VALUES (?, ?, ?)')
+          .run('X', 'Y', `060000000${phoneCounter}`).lastInsertRowid;
+        legacyDb
+          .prepare('INSERT INTO orders (customer_id, season, status, total_cents) VALUES (?, ?, ?, ?)')
+          .run(customerId, '2026', status, 1000);
+      };
+      insertLegacyOrder('recue');
+      insertLegacyOrder('payee');
+      insertLegacyOrder('retiree');
+
+      migrate(legacyDb); // ajoute paid_status/picked_up + backfill unique
+
+      const rows = legacyDb.prepare('SELECT status, paid_status, picked_up FROM orders ORDER BY id').all();
+      expect(rows).toEqual([
+        { status: 'recue', paid_status: 'non', picked_up: 0 },
+        { status: 'payee', paid_status: 'oui', picked_up: 0 },
+        { status: 'retiree', paid_status: 'oui', picked_up: 1 },
+      ]);
+
+      legacyDb.close();
+    }
+  );
+
+  it('ne re-backfille jamais après le premier ajout : ne doit pas écraser un choix admin fait entre-temps', () => {
+    const customerId = insertCustomer();
+    insertOrder(customerId);
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+    // status='retiree' impliquerait paid_status='oui' si le backfill se redéclenchait —
+    // simule une correction manuelle de l'admin après le backfill initial.
+    db.prepare("UPDATE orders SET status = 'retiree', paid_status = 'non' WHERE id = ?").run(orderId);
+
+    migrate(db); // ré-exécution (ex. redémarrage du serveur)
+
+    expect(db.prepare('SELECT paid_status FROM orders WHERE id = ?').get(orderId).paid_status).toBe('non');
+  });
 });
 
 describe('contraintes products', () => {

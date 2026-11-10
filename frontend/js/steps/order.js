@@ -5,6 +5,7 @@ import {
   setProductQuantity,
   hasAnyQuantity,
   setProducts,
+  setOption,
   setPublicSettings,
   roundToStep,
   QUANTITY_STEP_KG,
@@ -19,6 +20,31 @@ const BUTTON_STEP_KG = 1;
 // Plage affichée dans la roulette de sélection (au-delà, la saisie directe au
 // clavier dans le champ reste toujours possible — jamais désactivée).
 const WHEEL_MAX_KG = 20;
+
+// Ordre d'affichage demandé explicitement par l'utilisateur le 2026-11-10
+// (distinct de l'ordre renvoyé par GET /api/products, trié par id — purement
+// un choix d'affichage front, aucun changement côté back). Un produit absent
+// de cette liste serait affiché après, dans l'ordre reçu de l'API.
+const DISPLAY_ORDER = ['noir', 'blanc', 'blanc_morue'];
+
+function sortProductsForDisplay(products) {
+  return [...products].sort((a, b) => {
+    const indexA = DISPLAY_ORDER.indexOf(a.id);
+    const indexB = DISPLAY_ORDER.indexOf(b.id);
+    if (indexA === -1 && indexB === -1) return 0;
+    if (indexA === -1) return 1;
+    if (indexB === -1) return -1;
+    return indexA - indexB;
+  });
+}
+
+// Préférence libre par commande (demande directe du 2026-11-10), affichée
+// sous la dernière carte produit — un seul champ pour toute la commande.
+const ORDER_OPTIONS = [
+  { value: '', label: '' },
+  { value: 'plus_piment', label: 'Plus de piment' },
+  { value: 'moins_piment', label: 'Moins de piment' },
+];
 
 function escapeHtml(value) {
   const div = document.createElement('div');
@@ -56,6 +82,12 @@ function init(container, ctx) {
   container.innerHTML = `
     <h2>Votre commande</h2>
     <div data-role="products"></div>
+    <div class="order-option">
+      <label for="order-option-select">Option</label>
+      <select id="order-option-select" data-role="option">
+        ${ORDER_OPTIONS.map((o) => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('')}
+      </select>
+    </div>
     <p data-role="error" class="error" hidden></p>
     <div class="nav">
       <button type="button" data-role="prev">Précédent</button>
@@ -64,6 +96,9 @@ function init(container, ctx) {
   `;
   container.querySelector('[data-role="prev"]').addEventListener('click', () => ctx.goPrev());
   container.querySelector('[data-role="next"]').addEventListener('click', () => ctx.goNext());
+  container.querySelector('[data-role="option"]').addEventListener('change', (event) => {
+    ctx.update((s) => setOption(s, event.target.value));
+  });
 }
 
 // Appelé par app.js chaque fois qu'on arrive sur cette étape (.ai/decisions.md :
@@ -86,7 +121,7 @@ function render(container, state, ctx) {
   if (productsEl.childElementCount !== state.products.length) {
     productsEl.innerHTML = '';
     const wheelValues = buildWheelValues();
-    for (const product of state.products) {
+    for (const product of sortProductsForDisplay(state.products)) {
       const card = document.createElement('div');
       card.className = 'product-card';
       card.dataset.productId = product.id;
@@ -181,6 +216,11 @@ function render(container, state, ctx) {
   }
 
   container.querySelector('[data-role="next"]').disabled = !hasAnyQuantity(state);
+
+  const optionSelect = container.querySelector('[data-role="option"]');
+  if (optionSelect.value !== state.option) {
+    optionSelect.value = state.option;
+  }
 }
 
 export { init, enter, render };

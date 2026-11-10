@@ -19,7 +19,7 @@ describe('PUT /api/admin/settings', () => {
     expect(res.status).toBe(401);
   });
 
-  it('modifie la date de conception et recalcule bien la date limite publique', async () => {
+  it('modifie la date de conception et la répercute sur la route publique, sans toucher order_deadline', async () => {
     const built = buildTestApp();
     db = built.db;
     const agent = await loginAgent(built.app);
@@ -28,7 +28,8 @@ describe('PUT /api/admin/settings', () => {
     expect(putRes.status).toBe(200);
 
     const publicRes = await request(built.app).get('/api/settings/public');
-    expect(publicRes.body.orderDeadline).toBe('2026-12-13');
+    expect(publicRes.body.conceptionDate).toBe('2026-12-20');
+    expect(publicRes.body.orderDeadline).toBe('2026-12-06'); // inchangée (seed), plus jamais recalculée
   });
 
   it('rejette une date de conception invalide', async () => {
@@ -36,6 +37,30 @@ describe('PUT /api/admin/settings', () => {
     db = built.db;
     const agent = await loginAgent(built.app);
     const res = await agent.put('/api/admin/settings').send({ conception_date: 'pas-une-date' });
+    expect(res.status).toBe(400);
+  });
+
+  // order_deadline est désormais saisie manuellement, indépendamment de
+  // conception_date (demande explicite du 2026-11-10, .ai/decisions.md —
+  // revient sur M3, qui la calculait automatiquement).
+  it('modifie order_deadline indépendamment de conception_date et la répercute sur la route publique', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+
+    const putRes = await agent.put('/api/admin/settings').send({ order_deadline: '2026-12-12' });
+    expect(putRes.status).toBe(200);
+
+    const publicRes = await request(built.app).get('/api/settings/public');
+    expect(publicRes.body.orderDeadline).toBe('2026-12-12');
+    expect(publicRes.body.conceptionDate).toBe('2026-12-13'); // inchangée (seed)
+  });
+
+  it('rejette une order_deadline invalide', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+    const res = await agent.put('/api/admin/settings').send({ order_deadline: 'pas-une-date' });
     expect(res.status).toBe(400);
   });
 

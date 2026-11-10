@@ -4,14 +4,15 @@ const PLACEHOLDER_PRODUCTS = [
   { id: 'noir', name: 'Boudin noir', price_per_kg: 1000 },
 ];
 
-// Prix placeholder (10,00 € / kg) et date placeholder : décisions en suspens
-// (.ai/decisions.md), à remplacer avant la vraie saison. `order_deadline` n'est
-// pas stocké ici : il est calculé à la demande par le service de dates (M3)
-// à partir de `conception_date`, pour éviter toute désynchronisation si
-// `conception_date` change après coup.
+// Prix placeholder (10,00 € / kg) et dates placeholder : décisions en suspens
+// (.ai/decisions.md), à remplacer avant la vraie saison. `conception_date` et
+// `order_deadline` sont toutes les deux saisies manuellement par l'admin,
+// indépendamment l'une de l'autre (demande explicite du 2026-11-10 — revient
+// sur M3, qui calculait order_deadline = conception_date - 7 jours).
 const PLACEHOLDER_SETTINGS = {
   season: '2026',
   conception_date: '2026-12-13',
+  order_deadline: '2026-12-06',
 };
 
 function seed(db) {

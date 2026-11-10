@@ -1,16 +1,18 @@
 const express = require('express');
 const { setSetting, getSetting } = require('../../db/settingsRepo');
 const { upsertCampaign } = require('../../db/campaignsRepo');
-const { parseConceptionDate } = require('../../services/dates');
+const { parseDateString } = require('../../services/dates');
 
 function createAdminSettingsRouter({ db }) {
   const router = express.Router();
 
   router.put('/', (req, res) => {
-    const { conception_date, season, news, pickup_address, pickup_time, contact_phone } = req.body || {};
+    const { conception_date, order_deadline, season, news, pickup_address, pickup_time, contact_phone } =
+      req.body || {};
 
     if (
       conception_date === undefined &&
+      order_deadline === undefined &&
       season === undefined &&
       news === undefined &&
       pickup_address === undefined &&
@@ -22,11 +24,23 @@ function createAdminSettingsRouter({ db }) {
 
     if (conception_date !== undefined) {
       try {
-        parseConceptionDate(conception_date);
+        parseDateString(conception_date, 'Date de conception');
       } catch (err) {
         return res.status(400).json({ error: err.message });
       }
       setSetting(db, 'conception_date', conception_date);
+    }
+
+    // order_deadline n'est plus calculée (conception_date - 7 jours, M3) :
+    // saisie manuelle indépendante par l'admin (demande explicite du
+    // 2026-11-10, .ai/decisions.md — revient sur M3).
+    if (order_deadline !== undefined) {
+      try {
+        parseDateString(order_deadline, 'Date limite');
+      } catch (err) {
+        return res.status(400).json({ error: err.message });
+      }
+      setSetting(db, 'order_deadline', order_deadline);
     }
 
     if (season !== undefined) {

@@ -9,11 +9,15 @@ function createSettingsRouter({ db, nonceSecret }) {
 
   router.get('/public', (req, res) => {
     const conceptionDate = getSetting(db, 'conception_date');
+    const orderDeadline = getSetting(db, 'order_deadline');
     if (!conceptionDate) {
       return res.status(500).json({ error: 'Configuration manquante : conception_date.' });
     }
+    if (!orderDeadline) {
+      return res.status(500).json({ error: 'Configuration manquante : order_deadline.' });
+    }
 
-    const lockInfo = getLockInfo(conceptionDate);
+    const lockInfo = getLockInfo(conceptionDate, orderDeadline);
     const nonce = generateNonce(nonceSecret);
     const news = getSetting(db, 'news') || '';
     const contact_phone = getSetting(db, 'contact_phone') || '';

@@ -70,15 +70,92 @@ section {
 }
 
 .orders-summary {
+  margin-bottom: 16px;
+}
+
+/* Résumé en tuiles (Option B proposée le 2026-11-10, choisie par
+   l'utilisateur) : deux tuiles "gros chiffre" (commandes, montant), puis un
+   groupe de tuiles plus discrètes pour le détail kg par type + le total. */
+.tile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+}
+
+.tile {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 14px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  padding: 10px 12px;
-  margin-bottom: 12px;
+  flex-direction: column;
+  gap: 4px;
   background: var(--color-bg);
+}
+
+.tile .label {
+  font-size: 0.72rem;
+  color: #6b5a44;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tile .value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+.tile.headline {
+  background: #f3e4de;
+  border-color: #e4c9bd;
+}
+
+.tile.headline .value {
+  color: var(--color-primary);
+}
+
+.sr-group-label {
+  font-size: 0.72rem;
+  color: #6b5a44;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 10px 0 6px;
+}
+
+.tile-sub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.tile-sub {
   border: 1px solid var(--color-border);
   border-radius: 6px;
-  font-size: 0.9rem;
+  padding: 8px 10px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tile-sub .label {
+  font-size: 0.68rem;
+  color: #6b5a44;
+}
+
+.tile-sub .value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-sub.total {
+  border-color: var(--color-primary);
+}
+
+.tile-sub.total .value {
+  color: var(--color-primary);
 }
 
 .orders-table {
@@ -112,9 +189,15 @@ section {
   border-radius: 4px;
 }
 
+.col-option {
+  min-width: 140px;
+}
+
 .col-paid,
 .col-pickedup {
-  min-width: 130px;
+  /* Listes déroulantes (demande directe du 2026-11-10) : un peu moins large
+     que les anciennes cases à cocher + libellé. */
+  min-width: 100px;
 }
 
 .sort-btn {

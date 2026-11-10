@@ -88,17 +88,16 @@ L'application remplace le carnet et les échanges informels par :
 - Session avec expiration. Protection contre la force brute (limitation de tentatives de connexion).
 
 ### 6.2 Liste des commandes
-- Tableau ou liste lisible sur mobile : nom, prénom, téléphone, produits, total, date de commande, statut.
-- Filtres : statut, date de commande.
+- Tableau ou liste lisible sur mobile : nom, prénom, téléphone, produits, total, date de commande, payé, récupéré.
+- Filtres : payé, récupéré, date de commande.
 - Recherche par nom ou téléphone.
 
-### 6.3 Statut d'une commande
-Valeurs possibles :
-- `recue` : commande enregistrée (état initial).
-- `payee` : paiement reçu (au retrait ou en ligne).
-- `retiree` : boudins remis au client.
+### 6.3 Payé / Récupéré d'une commande
+Deux champs **indépendants** (revient le 2026-11-10 sur une version antérieure à champ `statut` unique, qui liait les deux — voir `.ai/decisions.md`) : le père laisse parfois récupérer une commande avant paiement, un modèle à champ unique ne pouvait pas représenter ce cas.
+- Payé : `non` / `en_attente` / `oui` (une commande neuve est `en_attente`, jamais directement `non` ou `oui`).
+- Récupéré : `non` / `oui`.
 
-Le père change le statut depuis le tableau de bord, en un tap.
+Le père change chacun des deux indépendamment depuis le tableau de bord, en liste déroulante.
 
 ### 6.4 Récapitulatif de production
 - Totaux par produit, exprimés en kilos (avec demi-kilos si nécessaire).
@@ -108,7 +107,7 @@ Le père change le statut depuis le tableau de bord, en un tap.
 ### 6.5 Export
 - Téléchargement de **toutes les commandes** au format **.xlsx**.
 - Téléchargement au format **.csv** (séparateur `;`, encodage UTF-8 avec BOM, pour compatibilité Excel et Google Sheets).
-- Colonnes minimales : date de commande, nom, prénom, téléphone, produit, quantité (unités 500 g), quantité (g), total, statut.
+- Colonnes minimales : date de commande, nom, prénom, téléphone, produit, quantité (unités 500 g), quantité (g), total, payé, récupéré.
 - Génération possible côté serveur ou côté navigateur (SheetJS pour le xlsx).
 
 ### 6.6 Paramètres
@@ -131,14 +130,14 @@ Le père change le statut depuis le tableau de bord, en un tap.
 
 **Table `settings`**
 - `key` (texte), `value` (texte)
-- Clés : `conception_date`, `order_deadline` (calculée ou stockée), `season`, `news` (texte libre, vide par défaut).
+- Clés : `conception_date`, `order_deadline` (toutes deux saisies manuellement et indépendamment, voir `.ai/decisions.md` 2026-11-10), `season`, `news` (texte libre, vide par défaut).
 
 **Table `customers`**
 - `id`, `first_name`, `last_name`, `phone` (unique par saison)
 - `created_at`
 
 **Table `orders`**
-- `id`, `customer_id`, `season`, `status`, `total_cents`, `paid_online` (booléen), `created_at`, `updated_at`
+- `id`, `customer_id`, `season`, `status` (ancien champ, conservé pour compatibilité — plus jamais mis à jour par le tableau de bord, voir `.ai/decisions.md` 2026-11-10), `paid_status` (`non`/`en_attente`/`oui`), `picked_up` (booléen), `total_cents`, `paid_online` (booléen), `option` (préférence libre par commande, `''`/`plus_piment`/`moins_piment`), `created_at`, `updated_at`
 
 **Table `order_items`**
 - `id`, `order_id`, `product_id`, `quantity_500g` (entier ≥ 1), `unit_price_cents` (prix figé au moment de la commande), `line_total_cents`
@@ -201,12 +200,13 @@ boudins/
 | POST | `/api/admin/login` | public | Connexion admin |
 | POST | `/api/admin/logout` | admin | Déconnexion |
 | GET | `/api/admin/orders` | admin | Liste des commandes (filtres) |
-| PATCH | `/api/admin/orders/:id/status` | admin | Changer le statut |
+| PATCH | `/api/admin/orders/:id/status` | admin | Changer le statut (ancien champ, conservé pour compatibilité — voir `.ai/decisions.md`) |
+| PATCH | `/api/admin/orders/:id/payment` | admin | Changer payé et/ou récupéré, indépendamment |
 | GET | `/api/admin/production` | admin | Totaux de production en kg |
 | GET | `/api/admin/export.xlsx` | admin | Export Excel |
 | GET | `/api/admin/export.csv` | admin | Export CSV |
 | PUT | `/api/admin/products/:id` | admin | Modifier un prix (au kg) |
-| PUT | `/api/admin/settings` | admin | Modifier date de conception, saison ou actualité (`news`) |
+| PUT | `/api/admin/settings` | admin | Modifier date de conception, date limite (saisies manuelles indépendantes), saison ou actualité (`news`) |
 
 ---
 

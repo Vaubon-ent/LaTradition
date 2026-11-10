@@ -54,6 +54,18 @@ describe('GET /api/admin/orders', () => {
     expect(res.body.orders[0].phone).toBe('0612345678');
     expect(res.body.orders[0].items).toHaveLength(1);
     expect(res.body.orders[0].items[0].product_id).toBe('blanc');
+    expect(res.body.orders[0].option).toBe('');
+  });
+
+  it('expose l\'option de la commande (demande directe du 2026-11-10)', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, { option: 'moins_piment' });
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.get('/api/admin/orders');
+
+    expect(res.body.orders[0].option).toBe('moins_piment');
   });
 
   it('filtre par statut', async () => {
@@ -137,6 +149,93 @@ describe('PATCH /api/admin/orders/:id/status', () => {
     const built = buildTestApp();
     db = built.db;
     const res = await request(built.app).patch('/api/admin/orders/1/status').send({ status: 'payee' });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('PATCH /api/admin/orders/:id/payment (découplage Payé/Récupéré, demande directe du 2026-11-10)', () => {
+  let db;
+
+  afterEach(() => {
+    db?.close();
+  });
+
+  it('une commande neuve est en_attente / non récupérée par défaut', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app);
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.get('/api/admin/orders');
+
+    expect(res.body.orders[0].paid_status).toBe('en_attente');
+    expect(res.body.orders[0].picked_up).toBe(0);
+  });
+
+  it('modifie paid_status seul, sans toucher picked_up', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app);
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.patch(`/api/admin/orders/${orderId}/payment`).send({ paid_status: 'oui' });
+
+    expect(res.status).toBe(200);
+    const order = db.prepare('SELECT paid_status, picked_up FROM orders WHERE id = ?').get(orderId);
+    expect(order.paid_status).toBe('oui');
+    expect(order.picked_up).toBe(0);
+  });
+
+  it('modifie picked_up seul, sans toucher paid_status (une commande peut être récupérée sans être payée)', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app);
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.patch(`/api/admin/orders/${orderId}/payment`).send({ picked_up: true });
+
+    expect(res.status).toBe(200);
+    const order = db.prepare('SELECT paid_status, picked_up FROM orders WHERE id = ?').get(orderId);
+    expect(order.paid_status).toBe('en_attente'); // inchangé
+    expect(order.picked_up).toBe(1);
+  });
+
+  it('rejette un paid_status invalide', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app);
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.patch(`/api/admin/orders/${orderId}/payment`).send({ paid_status: 'peut-etre' });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejette un corps sans aucun champ', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app);
+    const orderId = db.prepare('SELECT id FROM orders').get().id;
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.patch(`/api/admin/orders/${orderId}/payment`).send({});
+    expect(res.status).toBe(400);
+  });
+
+  it('renvoie 404 pour une commande inexistante', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+    const res = await agent.patch('/api/admin/orders/9999/payment').send({ paid_status: 'oui' });
+    expect(res.status).toBe(404);
+  });
+
+  it('refuse sans authentification', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const res = await request(built.app).patch('/api/admin/orders/1/payment').send({ paid_status: 'oui' });
     expect(res.status).toBe(401);
   });
 });

@@ -44,10 +44,10 @@ function checkPhone({ phone, nonce }) {
   });
 }
 
-function submitOrder({ first_name, last_name, phone, items, nonce, website = '' }) {
+function submitOrder({ first_name, last_name, phone, items, nonce, option = '', website = '' }) {
   return request('/api/orders', {
     method: 'POST',
-    body: JSON.stringify({ first_name, last_name, phone, items, nonce, website }),
+    body: JSON.stringify({ first_name, last_name, phone, items, nonce, option, website }),
   });
 }
 

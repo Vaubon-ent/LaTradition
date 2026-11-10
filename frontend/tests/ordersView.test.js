@@ -16,6 +16,8 @@ function makeOrder(overrides = {}) {
     last_name: 'Dupont',
     phone: '0612345678',
     total_cents: 1000,
+    paid_status: 'en_attente',
+    picked_up: 0,
     items: [{ product_id: 'noir', quantity_500g: 2 }],
     ...overrides,
   };
@@ -23,7 +25,7 @@ function makeOrder(overrides = {}) {
 
 function mockFetch({ orders, statusResponses = [], exportResponse } = {}) {
   global.fetch = vi.fn(async (url, options = {}) => {
-    if (options.method === 'PATCH' && url.includes('/status')) {
+    if (options.method === 'PATCH') {
       const next = statusResponses.shift() || { status: 200, body: { ok: true } };
       return { ok: next.status >= 200 && next.status < 300, status: next.status, json: async () => next.body };
     }
@@ -111,6 +113,43 @@ describe('ordersView — totaux', () => {
   });
 });
 
+describe('ordersView — colonne Option (demande directe du 2026-11-10)', () => {
+  it('affiche le libellé de l\'option de chaque commande', async () => {
+    mockFetch({
+      orders: [
+        makeOrder({ id: 1, last_name: 'Dupont', option: 'plus_piment' }),
+        makeOrder({ id: 2, last_name: 'Martin', option: '' }),
+      ],
+    });
+    const root = getContainer();
+    await mount(root);
+
+    const rows = root.querySelectorAll('tbody tr');
+    expect(rows[0].textContent).toContain('Plus de piment');
+  });
+
+  it('le filtre Option masque les lignes qui ne correspondent pas, sans nouvel appel réseau', async () => {
+    mockFetch({
+      orders: [
+        makeOrder({ id: 1, last_name: 'Dupont', option: 'plus_piment' }),
+        makeOrder({ id: 2, last_name: 'Martin', option: '' }),
+      ],
+    });
+    const root = getContainer();
+    await mount(root);
+
+    const callsBefore = global.fetch.mock.calls.length;
+    const filterSelect = root.querySelector('[data-filter="option"]');
+    filterSelect.value = 'plus_piment';
+    filterSelect.dispatchEvent(new Event('change', { bubbles: true }));
+
+    const rows = root.querySelectorAll('tbody tr');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].textContent).toContain('Dupont');
+    expect(global.fetch.mock.calls.length).toBe(callsBefore);
+  });
+});
+
 describe('ordersView — filtrage colonne', () => {
   it('taper dans un filtre masque les lignes non correspondantes sans nouvel appel réseau', async () => {
     mockFetch({ orders: [makeOrder({ id: 1, last_name: 'Dupont' }), makeOrder({ id: 2, last_name: 'Martin' })] });
@@ -129,38 +168,84 @@ describe('ordersView — filtrage colonne', () => {
   });
 });
 
-describe('ordersView — case Récupéré', () => {
-  it('cocher Récupéré déclenche PATCH avec retiree et met à jour la ligne après succès', async () => {
-    mockFetch({ orders: [makeOrder({ status: 'recue' })], statusResponses: [{ status: 200, body: { ok: true } }] });
+describe('ordersView — Payé / Récupéré découplés (demande directe du 2026-11-10)', () => {
+  it('changer Récupéré déclenche PATCH /payment avec picked_up, sans toucher paid_status', async () => {
+    mockFetch({
+      orders: [makeOrder({ paid_status: 'non', picked_up: 0 })],
+      statusResponses: [{ status: 200, body: { ok: true } }],
+    });
     const root = getContainer();
     await mount(root);
 
-    const checkbox = root.querySelector('[data-role="pickedup-checkbox"]');
-    checkbox.checked = true;
-    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    const select = root.querySelector('[data-role="pickedup-select"]');
+    select.value = 'oui';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
     await flush();
 
     const patchCall = global.fetch.mock.calls.find(([url, opts]) => opts?.method === 'PATCH');
-    expect(patchCall[0]).toContain('/api/admin/orders/1/status');
-    expect(JSON.parse(patchCall[1].body)).toEqual({ status: 'retiree' });
+    expect(patchCall[0]).toContain('/api/admin/orders/1/payment');
+    expect(JSON.parse(patchCall[1].body)).toEqual({ picked_up: true });
 
-    const paidCheckbox = root.querySelector('[data-role="paid-checkbox"]');
-    expect(paidCheckbox.checked).toBe(true);
-    expect(paidCheckbox.disabled).toBe(true);
+    // Récupérée mais pas payée : les deux champs restent bien indépendants.
+    const paidSelect = root.querySelector('[data-role="paid-select"]');
+    expect(paidSelect.value).toBe('non');
+    expect(paidSelect.disabled).toBe(false);
   });
 
-  it('échec serveur → message d\'erreur affiché et case revenue à son état initial', async () => {
-    mockFetch({ orders: [makeOrder({ status: 'recue' })], statusResponses: [{ status: 500, body: { error: 'Erreur serveur.' } }] });
+  it('changer Payé (3 états) déclenche PATCH /payment avec paid_status, sans toucher picked_up', async () => {
+    mockFetch({
+      orders: [makeOrder({ paid_status: 'en_attente', picked_up: 0 })],
+      statusResponses: [{ status: 200, body: { ok: true } }],
+    });
     const root = getContainer();
     await mount(root);
 
-    const checkbox = root.querySelector('[data-role="pickedup-checkbox"]');
-    checkbox.checked = true;
-    checkbox.dispatchEvent(new Event('change', { bubbles: true }));
+    const select = root.querySelector('[data-role="paid-select"]');
+    select.value = 'oui';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
     await flush();
 
-    expect(checkbox.checked).toBe(false);
+    const patchCall = global.fetch.mock.calls.find(([url, opts]) => opts?.method === 'PATCH');
+    expect(patchCall[0]).toContain('/api/admin/orders/1/payment');
+    expect(JSON.parse(patchCall[1].body)).toEqual({ paid_status: 'oui' });
+
+    const pickedUpSelect = root.querySelector('[data-role="pickedup-select"]');
+    expect(pickedUpSelect.value).toBe('non');
+  });
+
+  it('échec serveur sur Récupéré → message d\'erreur affiché et liste déroulante revenue à son état initial', async () => {
+    mockFetch({
+      orders: [makeOrder({ paid_status: 'non', picked_up: 0 })],
+      statusResponses: [{ status: 500, body: { error: 'Erreur serveur.' } }],
+    });
+    const root = getContainer();
+    await mount(root);
+
+    const select = root.querySelector('[data-role="pickedup-select"]');
+    select.value = 'oui';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+
+    expect(select.value).toBe('non');
     const errorEl = root.querySelector('[data-role="pickedup-error"]');
+    expect(errorEl.hidden).toBe(false);
+  });
+
+  it('échec serveur sur Payé → message d\'erreur affiché et liste déroulante revenue à son état initial', async () => {
+    mockFetch({
+      orders: [makeOrder({ paid_status: 'en_attente', picked_up: 0 })],
+      statusResponses: [{ status: 500, body: { error: 'Erreur serveur.' } }],
+    });
+    const root = getContainer();
+    await mount(root);
+
+    const select = root.querySelector('[data-role="paid-select"]');
+    select.value = 'oui';
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    await flush();
+
+    expect(select.value).toBe('en_attente');
+    const errorEl = root.querySelector('[data-role="paid-error"]');
     expect(errorEl.hidden).toBe(false);
   });
 });

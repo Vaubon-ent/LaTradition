@@ -28,6 +28,7 @@
 - Dépend de : `better-sqlite3`.
 - Utilisé par : `backend/tests/db.test.js` ; futurs `routes/` et `services/` (M3+).
 - Note : `orders.UNIQUE(customer_id, season)` implémente la décision « dédoublonnage par téléphone » au niveau base de données.
+- `migrate.js` depuis le 2026-11-10 : `ensureColumn(db, table, columnName, columnDefSql)`, premier mécanisme `ALTER TABLE ADD COLUMN` idempotent du projet (renvoie si la colonne vient d'être ajoutée, pour déclencher un éventuel backfill une seule fois) — toutes les évolutions de schéma précédentes avaient eu lieu avant la mise en production (simple `CREATE TABLE IF NOT EXISTS`). Utilisé pour `orders.option`/`orders.paid_status`/`orders.picked_up`.
 
 ### `backend/src/services/pricing.js`
 - Rôle : construction des lignes de commande et calcul du total, en centimes entiers, prix figé au moment de l'appel.
@@ -36,10 +37,10 @@
 - Utilisé par : `backend/tests/pricing.test.js` ; futur `routes/orders.js` (M4).
 
 ### `backend/src/services/dates.js`
-- Rôle : calcul de la date limite de commande (conception − 7 jours civils) et de l'état de verrouillage, en fuseau `Europe/Paris`.
+- Rôle : validation des dates (`parseDateString`) et calcul de l'état de verrouillage, en fuseau `Europe/Paris`. **`order_deadline` n'est plus calculée depuis `conception_date` depuis le 2026-11-10** (revient sur M3, `.ai/decisions.md`) — les deux dates sont désormais saisies manuellement et indépendamment par l'admin ; `isOrderLocked`/`getLockInfo` prennent `order_deadline` directement.
 - Fichiers principaux : `dates.js`.
 - Dépend de : `luxon`.
-- Utilisé par : `backend/tests/dates.test.js` ; futurs `routes/settings.js` et `routes/orders.js` (M4).
+- Utilisé par : `backend/tests/dates.test.js`, `routes/settings.js`, `routes/orders.js`, `routes/admin/settings.js`.
 
 ### `backend/src/services/nonce.js`
 - Rôle : génération/vérification pure (sans accès DB) du nonce signé HMAC à usage unique.
@@ -98,11 +99,13 @@
 
 ### `backend/src/services/export.js`
 - Rôle : construction des lignes d'export (une ligne par produit commandé) et génération xlsx (`exceljs`)/CSV (`;`, BOM UTF-8) — CDC §6.5. Depuis M-DASH1 (2026-11-08) : aussi `getExportsDir()` (défaut `backend/data/exports/`) et `saveXlsxExport(db, season, { exportsDir })` — écrit `commandes-{season}.xlsx` sur disque serveur (écrase à chaque appel), réutilisé par `POST /api/admin/export/save`.
+- 2026-11-10 : colonne unique « Statut » (`orders.status`) remplacée par deux colonnes « Payé »/« Récupéré » (`orders.paid_status`/`orders.picked_up`) — `orders.status` ne reflétant plus la réalité une fois le dashboard découplé (voir `.ai/decisions.md`).
 - Dépend de : `exceljs`.
 - Utilisé par : `backend/src/routes/admin/export.js`.
 
-### `backend/src/db/ordersRepo.js`, `productsRepo.js`, `customersRepo.js` (enrichis en M6/M8)
+### `backend/src/db/ordersRepo.js`, `productsRepo.js`, `customersRepo.js` (enrichis en M6/M8, puis 2026-11-10)
 - Ajouts : `listOrders`/`updateOrderStatus`/`getProductionTotals` (ordersRepo), `updateProduct`/`getProductById` (productsRepo), `anonymizeCustomer` (customersRepo).
+- 2026-11-10 : `ordersRepo.updateOrderPaymentState` (met à jour `paid_status`/`picked_up` indépendamment, sans règle de transition — remplace l'usage de `updateOrderStatus` par le dashboard, qui reste disponible pour compatibilité avec le filtre `?status=`). `orders.option` (préférence libre), `orders.paid_status`/`orders.picked_up` ajoutées via `migrate.js` (`ensureColumn`, première vraie migration additive sur une table déjà en production — voir ce fichier ci-dessous).
 
 ### `backend/src/middleware/corsGuard.js`
 - Rôle : restriction CORS à une seule origine configurable (`ALLOWED_ORIGIN`), bloque par défaut si absente (CDC §9, décision M9).
@@ -127,7 +130,7 @@
 - `js/api.js` : wrappers `fetch` (`products`, `settings/public`, `check-phone`, `orders`), `window.API_BASE` surchargeable pour un test local contre un backend sur une autre origine (vide par défaut = proxy Netlify même origine en prod).
 - `js/draft.js` : persistance `localStorage` du brouillon (step + pii + items uniquement — jamais le nonce ni la liste produits, voir `.ai/decisions.md`).
 - `js/app.js` : orchestrateur (navigation, re-render, appel `enter()` des étapes à chaque transition, nettoyage du brouillon uniquement après confirmation serveur réussie).
-- `js/steps/{welcome,order,pii,recap,confirmation}.js` : un module par étape, chacun avec `init()` (DOM statique + listeners, une seule fois) et `render()` (mise à jour des parties dynamiques) ; `order.js`/`welcome.js`/`confirmation.js` ont aussi `enter()` (appels réseau/nettoyage déclenchés à l'arrivée sur l'étape).
+- `js/steps/{welcome,order,pii,recap,confirmation}.js` : un module par étape, chacun avec `init()` (DOM statique + listeners, une seule fois) et `render()` (mise à jour des parties dynamiques) ; `order.js`/`welcome.js`/`confirmation.js` ont aussi `enter()` (appels réseau/nettoyage déclenchés à l'arrivée sur l'étape). Depuis le 2026-11-10, `order.js` affiche les cartes produit dans un ordre fixe (`DISPLAY_ORDER`, front uniquement) et une liste déroulante « Option » (préférence libre par commande, `state.option`) sous la dernière carte.
 - `css/styles.css` : thème clair unique, pas de dark mode (hors scope).
 - Tests (`tests/`, vitest + jsdom, `npm test` dans `frontend/`) : logique pure (`state.test.js`, `draft.test.js`, `pii-validation.test.js`), wrappers API mockés (`api.test.js`), et un test d'intégration DOM (`app.test.js`) couvrant navigation avant/arrière (F1), avertissement de doublon non bloquant (F4), total serveur affiché + nettoyage du brouillon (F5/F6/F7). 27 tests verts.
 - Vérifié manuellement en conditions réelles (backend réel sur `127.0.0.1:3101`, front servi statiquement) : parcours complet jusqu'à confirmation, et parcours avec téléphone en doublon (avertissement affiché, navigation non bloquée).
@@ -137,13 +140,13 @@
 - Rôle : point d'entrée `/admin` — login, détection de session, gestion globale de l'expiration de session (401), et depuis M-DASH3 le contenu métier de la vue dashboard (tableau des commandes).
 - `index.html` : 3 `<section data-view>` (`loading`, `login`, `dashboard`) jamais détruites/recréées ; seule `hidden` change (même pattern que `frontend/index.html`). Depuis M-DASH3, `dashboard` ne contient plus qu'un en-tête + un conteneur vide (`[data-role="dashboard-content"]`) rempli entièrement par `ordersView.js`. Tous les chemins (CSS, JS, appels API) écrits en absolu depuis la racine du domaine (`/admin/...`, `/api/admin/...`), jamais en relatif — convention actée en Decision-Gel du 2026-11-08.
 - `js/adminState.js` : état plat `{ view, loginError }`, fonctions pures, aucune dépendance au DOM — même pattern que `../../js/state.js`.
-- `js/adminApi.js` : `checkSession`/`login`/`logout`, `adminFetch` + `onUnauthorized(handler)` (centralise la détection de 401 pour toutes les vues métier) ; depuis M-DASH3 : `fetchOrders`/`updateOrderStatus`/`saveOrdersExport`.
+- `js/adminApi.js` : `checkSession`/`login`/`logout`, `adminFetch` + `onUnauthorized(handler)` (centralise la détection de 401 pour toutes les vues métier) ; depuis M-DASH3 : `fetchOrders`/`updateOrderStatus`/`saveOrdersExport`. Depuis le 2026-11-10 : `updateOrderPayment` (`PATCH .../payment`, payload partiel `{paid_status}`/`{picked_up}`) — `updateOrderStatus` conservée mais plus utilisée par `ordersView.js`.
 - `js/adminApp.js` : orchestrateur — détection de session au chargement, login (401/429), logout, handler `onUnauthorized` ; depuis M-DASH3, appelle `ordersView.mount(dashboardContent)` à chaque passage en vue dashboard (chargement avec session valide, ou login réussi) — jamais depuis `render()`.
-- `js/ordersData.js` (M-DASH2, pur, sans DOM) : `PRODUCT_COLUMNS`, `kgForProduct`, `isPaid`/`isPickedUp` (mapping sur `orders.status` existant, Option A, `.ai/decisions.md`), `statusAfterPaidToggle`/`statusAfterPickedUpToggle` (règle de transition de statut), `formatDate`/`formatKg`, `matchesFilters`.
-- `js/ordersView.js` (M-DASH3, DOM) : `mount(root)` — construit tableau + filtres + boutons d'action, filtrage en mémoire (pas de refetch), délégation d'événements sur `<tbody>`. Cases Payé/Récupéré → `PATCH .../status` ; bouton Exporter → `POST /export/save` ; boutons Clôturer/Nouvelle campagne → message stub, aucun appel réseau.
+- `js/ordersData.js` (M-DASH2, pur, sans DOM) : `PRODUCT_COLUMNS`, `kgForProduct`, `formatDate`/`formatKg`, `matchesFilters`. **Depuis le 2026-11-10** : `OPTION_LABELS`/`optionLabel` (préférence libre par commande), `PAID_STATUS_LABELS`/`paidStatusLabel`/`pickedUpLabel` — `isPaid`/`isPickedUp`/`statusAfterPaidToggle`/`statusAfterPickedUpToggle` (mapping sur `orders.status`, Option A du 2026-11-08) **supprimés**, Payé/Récupéré lus directement sur `orders.paid_status`/`orders.picked_up`, indépendants (`.ai/decisions.md`).
+- `js/ordersView.js` (M-DASH3, DOM) : `mount(root)` — construit tableau + filtres + boutons d'action, filtrage en mémoire (pas de refetch), délégation d'événements sur `<tbody>`. **Depuis le 2026-11-10** : colonnes Payé/Récupéré en listes déroulantes indépendantes (`PATCH .../payment`, plus `PATCH .../status`) ; nouvelle colonne Option ; résumé en tuiles (`.tile-grid`/`.tile-sub-grid`, Option B d'un mock-up proposé à l'utilisateur). Bouton Exporter → `POST /export/save` ; boutons Clôturer/Nouvelle campagne → message stub, aucun appel réseau.
 - `css/admin.css` : feuille dédiée, indépendante de `frontend/css/styles.css`. Depuis M-DASH3 : dashboard élargi (1100px), login/loading restent étroits et centrés.
-- Tests (`frontend/tests/{adminState,adminApi,adminApp,ordersData,ordersView}.test.js`) : état pur, wrappers API mockés, intégration DOM jsdom (chargement/login/logout/401, montage tableau, filtrage sans refetch, transitions payé/récupéré avec revert sur échec, export, boutons stub sans réseau). **87 tests front verts au total** (11 fichiers).
-- Dépend de : `GET /api/admin/session` (M-ADM1), `POST /api/admin/{login,logout}` (M5), `GET /api/admin/orders`/`PATCH /api/admin/orders/:id/status` (M6), `POST /api/admin/export/save` (M-DASH1).
+- Tests (`frontend/tests/{adminState,adminApi,adminApp,ordersData,ordersView}.test.js`) : état pur, wrappers API mockés, intégration DOM jsdom (chargement/login/logout/401, montage tableau, filtrage sans refetch, Payé/Récupéré indépendants avec revert sur échec, export, boutons stub sans réseau).
+- Dépend de : `GET /api/admin/session` (M-ADM1), `POST /api/admin/{login,logout}` (M5), `GET /api/admin/orders`/`PATCH /api/admin/orders/:id/{status,payment}` (M6, 2026-11-10), `POST /api/admin/export/save` (M-DASH1).
 - M-ADM3 **validée** le 2026-11-08 (login réel en production). M-DASH4 (vérification manuelle réelle) faite en local uniquement (backend réel, API réelle) — **pas de clic réel en navigateur** (outil navigateur indisponible dans la session d'implémentation), reste à faire par l'utilisateur ou en session avec outil navigateur, ainsi que la vérification en production une fois Netlify redéployé.
 
 ### `netlify.toml` (2026-11-07, `docs/plan-deploiement.md` mission D4)

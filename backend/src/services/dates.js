@@ -1,47 +1,40 @@
 const { DateTime } = require('luxon');
 
 const TIMEZONE = 'Europe/Paris';
-const ORDER_DEADLINE_OFFSET_DAYS = 7;
 
-function parseConceptionDate(conceptionDateStr) {
-  const dt = DateTime.fromISO(conceptionDateStr, { zone: TIMEZONE }).startOf('day');
+// conception_date et order_deadline sont toutes les deux des dates saisies
+// manuellement par l'admin (demande explicite du 2026-11-10, .ai/decisions.md)
+// — revient sur M3, qui calculait order_deadline = conception_date - 7 jours.
+// Même validation pour les deux (date calendaire valide en Europe/Paris).
+function parseDateString(dateStr, label = 'Date') {
+  const dt = DateTime.fromISO(dateStr, { zone: TIMEZONE }).startOf('day');
   if (!dt.isValid) {
-    throw new Error(`Date de conception invalide : ${conceptionDateStr}`);
+    throw new Error(`${label} invalide : ${dateStr}`);
   }
   return dt;
 }
 
-// Jour calendaire limite (en Europe/Paris) : conception_date - 7 jours civils.
-// `.minus({ days })` sur un DateTime zoné effectue une soustraction calendaire
-// (conserve l'heure locale), pas une soustraction de 7×24h — important lors
-// d'un changement d'heure DST entre les deux dates.
-function getOrderDeadlineDate(conceptionDateStr) {
-  return parseConceptionDate(conceptionDateStr).minus({ days: ORDER_DEADLINE_OFFSET_DAYS });
+// Dernier instant où une commande est encore acceptée : 23:59:59.999 (Europe/
+// Paris) du jour de order_deadline.
+function getLockMoment(orderDeadlineStr) {
+  return parseDateString(orderDeadlineStr, 'Date limite').endOf('day');
 }
 
-// Dernier instant où une commande est encore acceptée : 23:59:59.999 du jour
-// limite, en Europe/Paris. Après cet instant, le formulaire est verrouillé.
-function getLockMoment(conceptionDateStr) {
-  return getOrderDeadlineDate(conceptionDateStr).endOf('day');
+function isOrderLocked(orderDeadlineStr, now = DateTime.now().setZone(TIMEZONE)) {
+  return now > getLockMoment(orderDeadlineStr);
 }
 
-function isOrderLocked(conceptionDateStr, now = DateTime.now().setZone(TIMEZONE)) {
-  return now > getLockMoment(conceptionDateStr);
-}
-
-function getLockInfo(conceptionDateStr, now = DateTime.now().setZone(TIMEZONE)) {
+function getLockInfo(conceptionDateStr, orderDeadlineStr, now = DateTime.now().setZone(TIMEZONE)) {
   return {
     conceptionDate: conceptionDateStr,
-    orderDeadline: getOrderDeadlineDate(conceptionDateStr).toISODate(),
-    locked: isOrderLocked(conceptionDateStr, now),
+    orderDeadline: orderDeadlineStr,
+    locked: isOrderLocked(orderDeadlineStr, now),
   };
 }
 
 module.exports = {
   TIMEZONE,
-  ORDER_DEADLINE_OFFSET_DAYS,
-  parseConceptionDate,
-  getOrderDeadlineDate,
+  parseDateString,
   getLockMoment,
   isOrderLocked,
   getLockInfo,

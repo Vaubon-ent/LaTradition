@@ -1,7 +1,7 @@
 const express = require('express');
-const { getLockInfo } = require('../services/dates');
+const { isOrderLocked } = require('../services/dates');
 const { buildOrderItems, computeOrderTotalCents, OrderValidationError } = require('../services/pricing');
-const { validateCustomerInput, ValidationError } = require('../services/validation');
+const { validateCustomerInput, validateOrderOption, ValidationError } = require('../services/validation');
 const { createAntiAbuseGuard } = require('../middleware/antiAbuseGuard');
 const { NonceError } = require('../services/nonce');
 const { getSetting } = require('../db/settingsRepo');
@@ -15,17 +15,22 @@ function createOrdersRouter({ db, nonceSecret, minDelayMs }) {
 
   router.post('/', antiAbuseGuard, (req, res) => {
     const conceptionDate = getSetting(db, 'conception_date');
+    const orderDeadline = getSetting(db, 'order_deadline');
     const season = getSetting(db, 'season');
-    if (!conceptionDate || !season) {
+    if (!conceptionDate || !orderDeadline || !season) {
       return res.status(500).json({ error: 'Configuration manquante.' });
     }
 
-    if (getLockInfo(conceptionDate).locked) {
+    // order_deadline n'est plus calculée depuis conception_date (revient sur
+    // M3, demande explicite du 2026-11-10, .ai/decisions.md) : saisie
+    // manuelle indépendante par l'admin.
+    if (isOrderLocked(orderDeadline)) {
       return res.status(403).json({ error: 'La date limite de commande est dépassée.' });
     }
 
     try {
       const customerInput = validateCustomerInput(req.body);
+      const option = validateOrderOption(req.body.option);
       const productsById = getActiveProductsById(db);
       const lines = buildOrderItems(req.body.items || [], productsById);
       const totalCents = computeOrderTotalCents(lines);
@@ -35,7 +40,7 @@ function createOrdersRouter({ db, nonceSecret, minDelayMs }) {
       // consommé qu'ici, dans la même transaction que la création de la
       // commande : voir db/ordersRepo.createOrder (bug P0 corrigé le
       // 2026-11-09, .ai/decisions.md).
-      createOrder(db, { customerId, season, lines, totalCents, nonceInfo: req.nonceInfo });
+      createOrder(db, { customerId, season, lines, totalCents, nonceInfo: req.nonceInfo, option });
 
       res.status(201).json({ total_cents: totalCents, conception_date: conceptionDate });
     } catch (err) {

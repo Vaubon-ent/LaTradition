@@ -2,7 +2,9 @@ const express = require('express');
 const {
   listOrders,
   updateOrderStatus,
+  updateOrderPaymentState,
   ORDER_STATUSES,
+  PAID_STATUSES,
   getOrderById,
   getOrderItemsForEdit,
   applyOrderEdit,
@@ -36,6 +38,31 @@ function createAdminOrdersRouter({ db }) {
     }
 
     const updated = updateOrderStatus(db, req.params.id, status);
+    if (!updated) {
+      return res.status(404).json({ error: 'Commande introuvable.' });
+    }
+    res.json({ ok: true });
+  });
+
+  // Payé / Récupéré découplés (demande directe du 2026-11-10, .ai/decisions.md
+  // — revient sur l'Option A du 2026-11-08) : deux champs indépendants, chacun
+  // modifiable seul, sans aucune règle de transition entre eux. Remplace
+  // l'usage de PATCH /:id/status par le dashboard (celui-ci reste disponible
+  // tel quel, pour compatibilité avec le filtre ?status= et l'export).
+  router.patch('/:id/payment', (req, res) => {
+    const { paid_status, picked_up } = req.body || {};
+
+    if (paid_status === undefined && picked_up === undefined) {
+      return res.status(400).json({ error: 'Aucun champ à modifier.' });
+    }
+    if (paid_status !== undefined && !PAID_STATUSES.includes(paid_status)) {
+      return res.status(400).json({ error: `Statut de paiement invalide : ${paid_status}` });
+    }
+    if (picked_up !== undefined && typeof picked_up !== 'boolean') {
+      return res.status(400).json({ error: 'picked_up doit être un booléen.' });
+    }
+
+    const updated = updateOrderPaymentState(db, req.params.id, { paid_status, picked_up });
     if (!updated) {
       return res.status(404).json({ error: 'Commande introuvable.' });
     }

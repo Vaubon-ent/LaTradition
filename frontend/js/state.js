@@ -15,6 +15,7 @@ function createInitialState() {
     locked: false,
     products: [],
     items: {},
+    option: '',
     pii: { first_name: '', last_name: '', phone: '' },
     phoneDuplicateWarning: false,
     order: null,
@@ -92,6 +93,12 @@ function setProducts(state, products) {
   return { ...state, products };
 }
 
+// Préférence libre par commande (demande directe du 2026-11-10) : un seul
+// champ pour toute la commande, pas par produit.
+function setOption(state, option) {
+  return { ...state, option };
+}
+
 function setPublicSettings(
   state,
   { conceptionDate, orderDeadline, locked, nonce, news, pickup_address, pickup_time, contact_phone }
@@ -125,7 +132,7 @@ function setOrderResult(state, order) {
 // unique, expire en 30 min, ne doit pas survivre à une fermeture de page) ni
 // la liste des produits (re-récupérée à chaque arrivée à l'étape Commande).
 function toDraft(state) {
-  return { step: state.step, pii: state.pii, items: state.items };
+  return { step: state.step, pii: state.pii, items: state.items, option: state.option };
 }
 
 function applyDraft(state, draft) {
@@ -137,6 +144,7 @@ function applyDraft(state, draft) {
     step: clampStep(draft.step || MIN_STEP),
     pii: { ...state.pii, ...draft.pii },
     items: { ...draft.items },
+    option: draft.option || '',
   };
 }
 
@@ -158,6 +166,7 @@ export {
   estimateLineCents,
   setPiiField,
   setProducts,
+  setOption,
   setPublicSettings,
   setNonce,
   setPhoneDuplicateWarning,
