@@ -154,7 +154,7 @@ function mount(root) {
         `
         ).join('')}
         <div class="tile-sub total">
-          <span class="label">Total (tous types)</span>
+          <span class="label">Total</span>
           <span class="value">${formatKg(totals.kgTotal)} kg</span>
         </div>
       </div>

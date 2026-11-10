@@ -40,6 +40,23 @@ describe('PUT /api/admin/settings', () => {
     expect(res.status).toBe(400);
   });
 
+  // Les champs attendus sont en snake_case (contrairement à GET
+  // /api/settings/public, qui répond en camelCase) : une clé inconnue (ex.
+  // conceptionDate au lieu de conception_date) doit être rejetée
+  // explicitement, pas ignorée silencieusement.
+  it('rejette une clé inconnue (ex. conceptionDate en camelCase) sans rien modifier', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+
+    const putRes = await agent.put('/api/admin/settings').send({ conceptionDate: '2026-12-20' });
+    expect(putRes.status).toBe(400);
+    expect(putRes.body.error).toMatch(/conceptionDate/);
+
+    const publicRes = await request(built.app).get('/api/settings/public');
+    expect(publicRes.body.conceptionDate).toBe('2026-12-13'); // inchangée (seed)
+  });
+
   // order_deadline est désormais saisie manuellement, indépendamment de
   // conception_date (demande explicite du 2026-11-10, .ai/decisions.md —
   // revient sur M3, qui la calculait automatiquement).

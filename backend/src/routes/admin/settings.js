@@ -6,9 +6,30 @@ const { parseDateString } = require('../../services/dates');
 function createAdminSettingsRouter({ db }) {
   const router = express.Router();
 
+  const KNOWN_FIELDS = [
+    'conception_date',
+    'order_deadline',
+    'season',
+    'news',
+    'pickup_address',
+    'pickup_time',
+    'contact_phone',
+  ];
+
   router.put('/', (req, res) => {
-    const { conception_date, order_deadline, season, news, pickup_address, pickup_time, contact_phone } =
-      req.body || {};
+    const body = req.body || {};
+    const { conception_date, order_deadline, season, news, pickup_address, pickup_time, contact_phone } = body;
+
+    // Les champs attendus sont en snake_case (contrairement à GET
+    // /api/settings/public, qui répond en camelCase) : une clé inconnue est
+    // rejetée explicitement plutôt qu'ignorée silencieusement, pour éviter
+    // qu'une erreur de casse (ex. conceptionDate au lieu de conception_date,
+    // déjà vécu deux fois avec order_deadline puis conception_date) donne
+    // l'impression d'un succès alors que rien n'a été modifié.
+    const unknownFields = Object.keys(body).filter((key) => !KNOWN_FIELDS.includes(key));
+    if (unknownFields.length > 0) {
+      return res.status(400).json({ error: `Paramètre(s) inconnu(s) : ${unknownFields.join(', ')}.` });
+    }
 
     if (
       conception_date === undefined &&

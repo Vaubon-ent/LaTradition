@@ -107,12 +107,13 @@ section {
 }
 
 .tile.headline {
-  background: #f3e4de;
-  border-color: #e4c9bd;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
+.tile.headline .label,
 .tile.headline .value {
-  color: var(--color-primary);
+  color: var(--color-primary-text);
 }
 
 .sr-group-label {
@@ -198,6 +199,27 @@ section {
   /* Listes déroulantes (demande directe du 2026-11-10) : un peu moins large
      que les anciennes cases à cocher + libellé. */
   min-width: 100px;
+}
+
+/* Alignement visuel avec le bouton "Modifier" juste à côté (demande directe
+   du 2026-11-10) : même rayon de bordure, même couleur de bordure, même
+   famille de police — plutôt que le rendu par défaut du navigateur. */
+.orders-table td select {
+  display: block;
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--color-text);
+  cursor: pointer;
+}
+
+.orders-table td select:hover,
+.orders-table td select:focus-visible {
+  border-color: var(--color-primary);
 }
 
 .sort-btn {
