@@ -107,7 +107,7 @@ section {
 }
 
 .tile.headline {
-  background: var(--color-primary);
+  background: rgba(140, 47, 27, 0.75); /* --color-primary, opacité réduite */
   border-color: var(--color-primary);
 }
 
