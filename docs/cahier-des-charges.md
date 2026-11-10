@@ -23,7 +23,7 @@ L'application remplace le carnet et les échanges informels par :
 1. Permettre à un client de commander en quelques taps depuis son téléphone.
 2. Afficher au client le total de sa commande après validation.
 3. Permettre au père de voir toutes les commandes, leur statut, et la quantité totale à fabriquer.
-4. Permettre l'export des commandes en Excel (.xlsx) ou CSV (compatible Google Sheets).
+4. Permettre l'export des commandes en CSV (compatible Excel et Google Sheets).
 5. Conserver les données clients d'une saison à l'autre.
 
 ---
@@ -105,10 +105,9 @@ Le père change chacun des deux indépendamment depuis le tableau de bord, en li
 - Exemple d'affichage : « Boudin blanc : 23,5 kg (47 unités de 500 g) ».
 
 ### 6.5 Export
-- Téléchargement de **toutes les commandes** au format **.xlsx**.
-- Téléchargement au format **.csv** (séparateur `;`, encodage UTF-8 avec BOM, pour compatibilité Excel et Google Sheets).
+- Téléchargement de **toutes les commandes** au format **.csv** (séparateur `;`, encodage UTF-8 avec BOM, pour compatibilité Excel et Google Sheets).
 - Colonnes minimales : date de commande, nom, prénom, téléphone, produit, quantité (unités 500 g), quantité (g), total, payé, récupéré.
-- Génération possible côté serveur ou côté navigateur (SheetJS pour le xlsx).
+- Export **.xlsx retiré** (décision du 2026-11-10, `.ai/decisions.md`) : chaque commande/campagne reste accessible directement en base (`orders.season`), ce qui suffit pour des statistiques inter-saisons sans dépendre d'un export sauvegardé sur disque.
 
 ### 6.6 Paramètres
 - Prix par produit (au kg, `price_per_kg`).
@@ -164,7 +163,6 @@ Le père change chacun des deux indépendamment depuis le tableau de bord, en li
 | Back | Node.js LTS + Express (ou Hono) | Simple, un seul langage avec le front |
 | Base de données | SQLite (fichier local), via `better-sqlite3` ou `sqlite3` | Suffisant pour le volume, zéro serveur à gérer |
 | Accès externe | Tailscale Funnel (adresse fixe `*.ts.net`, HTTPS) | Gratuit, sans domaine ni port ouvert sur la box |
-| Export xlsx | `exceljs` (serveur) ou SheetJS (navigateur) | Bibliothèques matures |
 | Paiement (hors V1) | Stripe Checkout | Frais réduits pour petit panier, pas de statut « particulier » à justifier |
 | Auth admin | Hash bcrypt ou argon2 + session cookie | Simple et sûr |
 
@@ -203,8 +201,10 @@ boudins/
 | PATCH | `/api/admin/orders/:id/status` | admin | Changer le statut (ancien champ, conservé pour compatibilité — voir `.ai/decisions.md`) |
 | PATCH | `/api/admin/orders/:id/payment` | admin | Changer payé et/ou récupéré, indépendamment |
 | GET | `/api/admin/production` | admin | Totaux de production en kg |
-| GET | `/api/admin/export.xlsx` | admin | Export Excel |
 | GET | `/api/admin/export.csv` | admin | Export CSV |
+| PUT | `/api/admin/orders/:id` | admin | Modifier PII + lignes d'une commande |
+| DELETE | `/api/admin/orders/:id` | admin | Supprimer une commande (jamais le client) |
+| DELETE | `/api/admin/orders` | admin | Supprimer toutes les commandes d'une saison (`{ season, confirm: true }`, jamais les clients) |
 | PUT | `/api/admin/products/:id` | admin | Modifier un prix (au kg) |
 | PUT | `/api/admin/settings` | admin | Modifier date de conception, date limite (saisies manuelles indépendantes), saison ou actualité (`news`) |
 
@@ -263,7 +263,7 @@ boudins/
 - [ ] Les commandes apparaissent dans l'admin immédiatement après validation.
 - [ ] Le statut d'une commande peut être changé en un tap.
 - [ ] Le récapitulatif de production donne les totaux exacts en kg, par produit.
-- [ ] L'export xlsx et CSV contient toutes les commandes avec les colonnes prévues.
+- [ ] L'export CSV contient toutes les commandes avec les colonnes prévues.
 - [ ] L'admin est inaccessible sans authentification.
 - [ ] L'API n'est accessible que via le proxy Netlify et Tailscale Funnel.
 - [ ] La base SQLite est sauvegardée automatiquement pendant la saison.

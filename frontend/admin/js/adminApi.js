@@ -88,10 +88,6 @@ function updateOrderPayment(id, payload) {
   });
 }
 
-function saveOrdersExport() {
-  return adminFetch('/api/admin/export/save', { method: 'POST' });
-}
-
 // Édition PII + lignes de commande (M-DASH5) : payload = { first_name,
 // last_name, phone, items: [{ product_id, quantity_500g }] }.
 function updateOrder(id, payload) {
@@ -117,7 +113,6 @@ export {
   fetchOrders,
   updateOrderStatus,
   updateOrderPayment,
-  saveOrdersExport,
   updateOrder,
   deleteOrder,
 };

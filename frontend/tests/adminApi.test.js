@@ -8,7 +8,6 @@ import {
   adminFetch,
   fetchOrders,
   updateOrderStatus,
-  saveOrdersExport,
   updateOrder,
   deleteOrder,
 } from '../admin/js/adminApi.js';
@@ -87,14 +86,6 @@ describe('adminApi', () => {
     expect(url).toContain('/api/admin/orders/42/status');
     expect(options.method).toBe('PATCH');
     expect(JSON.parse(options.body)).toEqual({ status: 'retiree' });
-  });
-
-  it('saveOrdersExport envoie un POST vers /api/admin/export/save', async () => {
-    mockFetchOnce(200, { ok: true, path: 'data/exports/commandes-2026.xlsx' });
-    await expect(saveOrdersExport()).resolves.toEqual({ ok: true, path: 'data/exports/commandes-2026.xlsx' });
-    const [url, options] = global.fetch.mock.calls[0];
-    expect(url).toContain('/api/admin/export/save');
-    expect(options.method).toBe('POST');
   });
 
   it('updateOrder envoie un PUT avec le payload PII + items', async () => {

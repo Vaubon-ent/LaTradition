@@ -201,6 +201,26 @@ function deleteOrder(db, id) {
   return result.changes > 0;
 }
 
+// Suppression admin de toutes les commandes d'une saison (demande directe du
+// 2026-11-10, usage Postman direct — pas d'écran dédié) : même principe que
+// deleteOrder (le client n'est jamais supprimé, seulement les commandes et
+// leurs lignes). Retourne le nombre de commandes supprimées (0 si la saison
+// n'a aucune commande, pas une erreur).
+function deleteOrdersBySeason(db, season) {
+  const deleteItems = db.prepare(
+    'DELETE FROM order_items WHERE order_id IN (SELECT id FROM orders WHERE season = ?)'
+  );
+  const deleteOrders = db.prepare('DELETE FROM orders WHERE season = ?');
+
+  const run = db.transaction(() => {
+    deleteItems.run(season);
+    return deleteOrders.run(season);
+  });
+
+  const result = run();
+  return result.changes;
+}
+
 // Totaux de production (CDC §6.4) : somme des quantités (en unités de 500 g)
 // par produit, converties en kg, sur toutes les commandes de la saison
 // (aucune commande n'est jamais annulée, cf. CDC §5.4 — donc pas de filtre
@@ -238,6 +258,7 @@ module.exports = {
   getOrderItemsForEdit,
   applyOrderEdit,
   deleteOrder,
+  deleteOrdersBySeason,
   getProductionTotals,
   ORDER_STATUSES,
   PAID_STATUSES,

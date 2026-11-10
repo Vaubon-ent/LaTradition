@@ -21,7 +21,6 @@ function buildTestApp({
   adminMaxLoginAttempts = 5,
   adminLockDurationMs = 15 * 60 * 1000,
   allowedOrigin = TEST_ALLOWED_ORIGIN,
-  exportsDir,
 } = {}) {
   const db = getDb(':memory:');
   migrate(db);
@@ -38,7 +37,6 @@ function buildTestApp({
     adminMaxLoginAttempts,
     adminLockDurationMs,
     allowedOrigin,
-    exportsDir,
   });
   return { app, db, nonceSecret, adminJwtSecret };
 }

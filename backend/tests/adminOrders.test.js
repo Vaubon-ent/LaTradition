@@ -462,6 +462,78 @@ describe('DELETE /api/admin/orders/:id', () => {
   });
 });
 
+describe('DELETE /api/admin/orders (suppression par saison)', () => {
+  let db;
+
+  afterEach(() => {
+    db?.close();
+  });
+
+  it('supprime toutes les commandes de la saison indiquée, sans toucher aux clients ni aux autres saisons', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app, { phone: '06 11 11 11 11' });
+    await placeOrder(built.app, { phone: '06 22 22 22 22' });
+    // Commande d'une autre saison, insérée directement (le parcours client
+    // ne permet pas de choisir la saison) — doit survivre à la suppression.
+    const otherCustomerId = db
+      .prepare('INSERT INTO customers (first_name, last_name, phone) VALUES (?, ?, ?)')
+      .run('Paul', 'Martin', '06 33 33 33 33').lastInsertRowid;
+    db.prepare('INSERT INTO orders (customer_id, season, total_cents, option) VALUES (?, ?, ?, ?)').run(
+      otherCustomerId,
+      '2027',
+      1000,
+      ''
+    );
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.delete('/api/admin/orders').send({ season: '2026', confirm: true });
+
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe(2);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM orders WHERE season = '2026'").get().n).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM order_items").get().n).toBe(0);
+    expect(db.prepare("SELECT COUNT(*) AS n FROM orders WHERE season = '2027'").get().n).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM customers').get().n).toBeGreaterThan(0);
+  });
+
+  it('renvoie deleted: 0 pour une saison sans commande, sans erreur', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+    const res = await agent.delete('/api/admin/orders').send({ season: '2099', confirm: true });
+    expect(res.status).toBe(200);
+    expect(res.body.deleted).toBe(0);
+  });
+
+  it('rejette sans confirm: true, sans rien supprimer', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    await placeOrder(built.app);
+
+    const agent = await loginAgent(built.app);
+    const res = await agent.delete('/api/admin/orders').send({ season: '2026' });
+
+    expect(res.status).toBe(400);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM orders').get().n).toBe(1);
+  });
+
+  it('rejette sans season', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const agent = await loginAgent(built.app);
+    const res = await agent.delete('/api/admin/orders').send({ confirm: true });
+    expect(res.status).toBe(400);
+  });
+
+  it('refuse sans authentification', async () => {
+    const built = buildTestApp();
+    db = built.db;
+    const res = await request(built.app).delete('/api/admin/orders').send({ season: '2026', confirm: true });
+    expect(res.status).toBe(401);
+  });
+});
+
 describe('GET /api/admin/production', () => {
   let db;
 

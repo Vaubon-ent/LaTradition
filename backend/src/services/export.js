@@ -1,11 +1,3 @@
-const fs = require('fs');
-const path = require('path');
-const ExcelJS = require('exceljs');
-
-function getExportsDir() {
-  return path.join(__dirname, '..', '..', 'data', 'exports');
-}
-
 const COLUMNS = [
   { header: 'Date de commande', key: 'created_at' },
   { header: 'Nom', key: 'last_name' },
@@ -59,16 +51,6 @@ function buildExportRows(db, season) {
   }));
 }
 
-async function buildXlsxBuffer(rows) {
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Commandes');
-  sheet.columns = COLUMNS;
-  for (const row of rows) {
-    sheet.addRow(row);
-  }
-  return workbook.xlsx.writeBuffer();
-}
-
 function csvEscape(value) {
   const str = String(value);
   if (/[";\n]/.test(str)) {
@@ -85,16 +67,4 @@ function buildCsv(rows) {
   return '﻿' + [header, ...lines].join('\n') + '\n';
 }
 
-// Un seul fichier par saison, écrasé à chaque export (décision retenue,
-// `.ai/decisions.md` du 2026-11-08) — pas d'historisation des exports
-// manuels intermédiaires.
-async function saveXlsxExport(db, season, { exportsDir = getExportsDir() } = {}) {
-  const rows = buildExportRows(db, season);
-  const buffer = await buildXlsxBuffer(rows);
-  fs.mkdirSync(exportsDir, { recursive: true });
-  const destPath = path.join(exportsDir, `commandes-${season}.xlsx`);
-  fs.writeFileSync(destPath, buffer);
-  return path.relative(path.join(__dirname, '..', '..'), destPath);
-}
-
-module.exports = { COLUMNS, buildExportRows, buildXlsxBuffer, buildCsv, getExportsDir, saveXlsxExport };
+module.exports = { COLUMNS, buildExportRows, buildCsv };

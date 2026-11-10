@@ -2,7 +2,7 @@
 // DOM construit entièrement ici (index.html ne fournit qu'un conteneur vide,
 // même pattern que le reste du socle admin).
 
-import { fetchOrders, updateOrderPayment, saveOrdersExport } from './adminApi.js';
+import { fetchOrders, updateOrderPayment } from './adminApi.js';
 import {
   PRODUCT_COLUMNS,
   OPTION_LABELS,
@@ -60,7 +60,6 @@ function mount(root) {
   root.innerHTML = `
     <p data-role="orders-message" hidden></p>
     <div class="orders-actions">
-      <button type="button" data-role="export-orders">Exporter (.xlsx)</button>
       <button type="button" data-role="close-campaign">Clôturer la campagne</button>
       <button type="button" data-role="new-campaign">Nouvelle campagne</button>
     </div>
@@ -309,15 +308,6 @@ function mount(root) {
     if (!button) return;
     const order = orders.find((o) => String(o.id) === String(button.dataset.orderId));
     if (order) editModal.open(order);
-  });
-
-  root.querySelector('[data-role="export-orders"]').addEventListener('click', async () => {
-    try {
-      const result = await saveOrdersExport();
-      showMessage(`Export enregistré : ${result.path}`);
-    } catch (err) {
-      showMessage("Échec de l'export.", true);
-    }
   });
 
   // Boutons stub (décision retenue du 2026-11-08) : aucune logique métier ni

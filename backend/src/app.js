@@ -31,7 +31,6 @@ function createApp({
   adminMaxLoginAttempts = DEFAULT_ADMIN_MAX_LOGIN_ATTEMPTS,
   adminLockDurationMs = DEFAULT_ADMIN_LOCK_DURATION_MS,
   allowedOrigin,
-  exportsDir,
 }) {
   const app = express();
 
@@ -58,7 +57,7 @@ function createApp({
   app.use('/api/admin', createAdminSessionRouter());
   app.use('/api/admin/orders', createAdminOrdersRouter({ db }));
   app.use('/api/admin/production', createAdminProductionRouter({ db }));
-  app.use('/api/admin', createAdminExportRouter({ db, exportsDir }));
+  app.use('/api/admin', createAdminExportRouter({ db }));
   app.use('/api/admin/products', createAdminProductsRouter({ db }));
   app.use('/api/admin/settings', createAdminSettingsRouter({ db }));
   app.use('/api/admin/customers', createAdminCustomersRouter({ db }));

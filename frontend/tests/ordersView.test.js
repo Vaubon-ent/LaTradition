@@ -349,23 +349,6 @@ describe('ordersView — édition commande (colonne Actions)', () => {
   });
 });
 
-describe('ordersView — export', () => {
-  it('clic sur Exporter déclenche POST /api/admin/export/save et affiche le chemin retourné', async () => {
-    mockFetch({ orders: [makeOrder()] });
-    const root = getContainer();
-    await mount(root);
-
-    root.querySelector('[data-role="export-orders"]').click();
-    await flush();
-
-    const exportCall = global.fetch.mock.calls.find(([url, opts]) => opts?.method === 'POST' && url.includes('/export/save'));
-    expect(exportCall).toBeTruthy();
-    const messageEl = root.querySelector('[data-role="orders-message"]');
-    expect(messageEl.hidden).toBe(false);
-    expect(messageEl.textContent).toContain('data/exports/commandes-2026.xlsx');
-  });
-});
-
 describe('ordersView — boutons stub', () => {
   it('Clôturer la campagne affiche le message stub sans appel réseau supplémentaire', async () => {
     mockFetch({ orders: [makeOrder()] });

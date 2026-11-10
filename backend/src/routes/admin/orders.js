@@ -9,6 +9,7 @@ const {
   getOrderItemsForEdit,
   applyOrderEdit,
   deleteOrder,
+  deleteOrdersBySeason,
 } = require('../../db/ordersRepo');
 const { getSetting } = require('../../db/settingsRepo');
 const { getActiveProductsById } = require('../../db/productsRepo');
@@ -123,6 +124,26 @@ function createAdminOrdersRouter({ db }) {
       return res.status(404).json({ error: 'Commande introuvable.' });
     }
     res.json({ ok: true });
+  });
+
+  // Suppression admin de toutes les commandes d'une saison (demande directe
+  // du 2026-11-10) : usage Postman direct, pas d'écran dédié — donc pas de
+  // double confirmation côté UI comme pour DELETE /:id. `confirm: true`
+  // explicite dans le corps de la requête, pour qu'un appel accidentel
+  // (mauvais endpoint, mauvaise saison copiée-collée) ne supprime rien sans
+  // intention claire. Les clients (table `customers`) ne sont jamais
+  // supprimés (cohérent avec deleteOrder et la conservation ad vitam).
+  router.delete('/', (req, res) => {
+    const { season, confirm } = req.body || {};
+    if (typeof season !== 'string' || season.trim().length === 0) {
+      return res.status(400).json({ error: 'season (chaîne non vide) requis.' });
+    }
+    if (confirm !== true) {
+      return res.status(400).json({ error: 'confirm doit être true pour confirmer la suppression.' });
+    }
+
+    const deleted = deleteOrdersBySeason(db, season);
+    res.json({ ok: true, deleted });
   });
 
   return router;
