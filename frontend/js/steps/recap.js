@@ -1,5 +1,5 @@
-import { submitOrder } from '../api.js';
-import { setOrderResult, formatKgLabel, estimateLineCents } from '../state.js';
+import { submitOrder, fetchPublicSettings } from '../api.js';
+import { setOrderResult, setNonce, formatKgLabel, estimateLineCents } from '../state.js';
 
 function formatEuros(cents) {
   return (cents / 100).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -29,6 +29,7 @@ function init(container, ctx) {
       Montant définitif confirmé à la validation.
     </p>
     <p data-role="error" class="error" hidden></p>
+    <button type="button" data-role="retry" hidden>Réessayer</button>
     <div class="nav">
       <button type="button" data-role="prev">Précédent</button>
       <button type="button" data-role="submit" class="primary">Valider la commande</button>
@@ -36,15 +37,25 @@ function init(container, ctx) {
   `;
   container.querySelector('[data-role="prev"]').addEventListener('click', () => ctx.goPrev());
   container.querySelector('[data-role="submit"]').addEventListener('click', () => handleSubmit(container, ctx));
+  container.querySelector('[data-role="retry"]').addEventListener('click', () => handleRetry(container, ctx));
 }
 
 // Le total n'est jamais calculé côté front : seule la réponse serveur de
 // POST /api/orders (total_cents) fait foi (.ai/decisions.md). En cas
 // d'erreur, la saisie (PII + quantités) n'est jamais perdue, pour permettre
 // une correction sans tout ressaisir.
+//
+// En dehors du 409 (doublon, message explicite dédié), le serveur ne renvoie
+// jamais que des erreurs internes (nonce expiré/invalide, config manquante,
+// etc.) sans aucune pertinence pour le client (retour utilisateur du
+// 2026-11-11) : message générique + bouton « Réessayer », qui récupère un
+// nonce frais avant de resoumettre. L'expiration elle-même (nonce valide 30
+// min, state.js) n'est volontairement pas traitée ici — voir .ai/decisions.md.
 async function handleSubmit(container, ctx) {
   const errorEl = container.querySelector('[data-role="error"]');
+  const retryEl = container.querySelector('[data-role="retry"]');
   errorEl.hidden = true;
+  retryEl.hidden = true;
   const state = ctx.getState();
   const items = Object.entries(state.items).map(([product_id, quantityKg]) => ({
     product_id,
@@ -63,9 +74,30 @@ async function handleSubmit(container, ctx) {
     ctx.update((s) => setOrderResult(s, order));
     ctx.goNext();
   } catch (err) {
-    errorEl.textContent =
-      err.status === 409 ? duplicateOrderMessage(state) : err.message || 'Impossible de valider la commande. Réessayez.';
+    if (err.status === 409) {
+      errorEl.textContent = duplicateOrderMessage(state);
+    } else {
+      errorEl.textContent = 'Une erreur est survenue lors de la validation. Cliquez sur « Réessayer ».';
+      retryEl.hidden = false;
+    }
     errorEl.hidden = false;
+  }
+}
+
+async function handleRetry(container, ctx) {
+  const retryEl = container.querySelector('[data-role="retry"]');
+  const errorEl = container.querySelector('[data-role="error"]');
+  retryEl.disabled = true;
+  try {
+    const settings = await fetchPublicSettings();
+    ctx.update((s) => setNonce(s, settings.nonce));
+    await handleSubmit(container, ctx);
+  } catch {
+    errorEl.textContent = 'Une erreur est survenue lors de la validation. Cliquez sur « Réessayer ».';
+    errorEl.hidden = false;
+    retryEl.hidden = false;
+  } finally {
+    retryEl.disabled = false;
   }
 }
 

@@ -42,10 +42,22 @@ const SETTINGS_RESPONSE = {
 };
 const PRODUCTS_RESPONSE = { products: [{ id: 'blanc', name: 'Boudin blanc', price_per_kg: 1000 }] };
 
-function mockFetchDefault({ checkPhoneResult, checkPhoneFails, orderResult, orderFails, products } = {}) {
+function mockFetchDefault({
+  checkPhoneResult,
+  checkPhoneFails,
+  orderResult,
+  orderFails,
+  orderFailStatus = 409,
+  orderFailBody,
+  orderFailOnce,
+  products,
+} = {}) {
+  let settingsCalls = 0;
+  let orderCalls = 0;
   global.fetch = vi.fn(async (url, options = {}) => {
     if (url.includes('/api/settings/public')) {
-      return { ok: true, json: async () => SETTINGS_RESPONSE };
+      settingsCalls += 1;
+      return { ok: true, json: async () => ({ ...SETTINGS_RESPONSE, nonce: `nonce-${settingsCalls}` }) };
     }
     if (url.includes('/api/products')) {
       return { ok: true, json: async () => (products ? { products } : PRODUCTS_RESPONSE) };
@@ -57,8 +69,16 @@ function mockFetchDefault({ checkPhoneResult, checkPhoneFails, orderResult, orde
       return { ok: true, json: async () => ({ duplicate: Boolean(checkPhoneResult) }) };
     }
     if (url.includes('/api/orders')) {
+      orderCalls += 1;
       if (orderFails) {
-        return { ok: false, status: 409, json: async () => ({ error: 'Commande déjà existante.' }) };
+        return {
+          ok: false,
+          status: orderFailStatus,
+          json: async () => orderFailBody || { error: 'Commande déjà existante.' },
+        };
+      }
+      if (orderFailOnce && orderCalls === 1) {
+        return { ok: false, status: 400, json: async () => ({ error: 'Nonce invalide ou expiré.' }) };
       }
       return { ok: true, json: async () => orderResult || { total_cents: 1000, conception_date: '2026-12-13' } };
     }
@@ -295,6 +315,50 @@ describe('soumission de commande et brouillon (F5/F6/F7)', () => {
     const draft = JSON.parse(localStorage.getItem(DRAFT_KEY));
     expect(draft.pii.first_name).toBe('Jean');
     expect(draft.items.blanc).toBe(1);
+  });
+
+  it('affiche un message générique et un bouton Réessayer, jamais le détail serveur, pour toute erreur hors doublon (retour utilisateur du 2026-11-11)', async () => {
+    mockFetchDefault({
+      orderFails: true,
+      orderFailStatus: 400,
+      orderFailBody: { error: 'Nonce invalide ou expiré.' },
+    });
+    await loadApp();
+    await fillUpToRecap();
+
+    document.querySelector('#step-4 [data-role="submit"]').click();
+    await flush();
+    await flush();
+
+    const errorEl = document.querySelector('#step-4 [data-role="error"]');
+    expect(errorEl.hidden).toBe(false);
+    expect(errorEl.textContent).not.toContain('Nonce');
+    const retryEl = document.querySelector('#step-4 [data-role="retry"]');
+    expect(retryEl.hidden).toBe(false);
+  });
+
+  it('le bouton Réessayer récupère un nonce frais et resoumet automatiquement la commande (option D, retour utilisateur du 2026-11-11)', async () => {
+    mockFetchDefault({ orderFailOnce: true });
+    await loadApp();
+    await fillUpToRecap();
+
+    document.querySelector('#step-4 [data-role="submit"]').click();
+    await flush();
+    await flush();
+
+    const retryEl = document.querySelector('#step-4 [data-role="retry"]');
+    expect(retryEl.hidden).toBe(false);
+    const firstOrderCall = global.fetch.mock.calls.find(([url]) => url.includes('/api/orders'));
+    const firstNonce = JSON.parse(firstOrderCall[1].body).nonce;
+
+    retryEl.click();
+    await flush();
+    await flush();
+
+    expect(document.getElementById('step-5').hidden).toBe(false);
+    const orderCalls = global.fetch.mock.calls.filter(([url]) => url.includes('/api/orders'));
+    expect(orderCalls).toHaveLength(2);
+    expect(JSON.parse(orderCalls[1][1].body).nonce).not.toBe(firstNonce);
   });
 
   it('inclut l\'option choisie dans la commande envoyée au serveur (demande directe du 2026-11-10)', async () => {
