@@ -2,6 +2,12 @@
 
 > Journal technique append-only : modifications de code, bugs, correctifs, changements d'architecture. Ne jamais réécrire une entrée existante.
 
+## 2026-11-11 — Libellé option « Moins de piment » → « Pas de piment »
+- Demande directe de l'utilisateur : renommer le libellé affiché au client (et à l'admin) pour l'option de commande, sans impact métier.
+- **Valeur interne `moins_piment` inchangée** (contrainte CHECK `backend/src/db/migrate.js`, `ORDER_OPTION_VALUES` de `backend/src/services/validation.js`, filtres/tri admin) — seul le texte affiché change, pour ne nécessiter aucune migration ni ressaisie des commandes déjà enregistrées avec cette option.
+- `frontend/js/steps/order.js` (liste déroulante, étape Commande) et `frontend/admin/js/ordersData.js` (`OPTION_LABELS`, réutilisé par le filtre de `ordersView.js`) : libellé changé en « Pas de piment ».
+- Tests adaptés (`frontend/tests/ordersData.test.js`, assertion de libellé + commentaire d'ordre alphabétique). **139 tests front, 191 tests back**, tous verts (aucune régression).
+
 ## 2026-11-10 — Découplage Payé/Récupéré dans le dashboard admin (revient sur l'Option A du 2026-11-08)
 - Contexte : demande directe de l'utilisateur (« quand une commande est récupérée elle n'est pas obligatoirement payé, donc les 2 champs ne doivent pas etre lié et modifié automatiquement »), accompagnée de la demande de liste déroulante à 3 états pour Payé. Touchait une décision explicitement rejetée (mais avec clause de réouverture déjà écrite le 2026-11-08) et des données de production réelles → 2 questions de clarification posées avant implémentation (voir `.ai/decisions.md`) : sens de « en attente » (= statut pas encore tranché, défaut d'une commande neuve) et correspondance de migration des commandes existantes (approuvée telle que proposée).
 - **Schéma** (`backend/src/db/migrate.js`) : deux nouvelles colonnes sur `orders` via le mécanisme `ensureColumn` déjà introduit pour `option` — `paid_status` (`'non'`/`'en_attente'`/`'oui'`, défaut `'en_attente'`) et `picked_up` (booléen, défaut `0`). `ensureColumn` renvoie désormais un booléen (colonne ajoutée ou non), utilisé pour ne déclencher le backfill qu'une seule fois, au premier ajout — jamais ré-exécuté ensuite (sinon un redémarrage du serveur écraserait un choix admin fait entre-temps). Backfill des commandes déjà en base, correspondance approuvée : `recue`→(`non`,`non`), `payee`→(`oui`,`non`), `retiree`→(`oui`,`oui`).

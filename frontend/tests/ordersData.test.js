@@ -154,7 +154,7 @@ describe('ordersData.optionLabel / OPTION_LABELS', () => {
   it('traduit chaque valeur stockée en libellé affiché', () => {
     expect(optionLabel('')).toBe('');
     expect(optionLabel('plus_piment')).toBe('Plus de piment');
-    expect(optionLabel('moins_piment')).toBe('Moins de piment');
+    expect(optionLabel('moins_piment')).toBe('Pas de piment');
     expect(OPTION_LABELS.plus_piment).toBe('Plus de piment');
   });
 });
@@ -206,7 +206,7 @@ describe('ordersData.sortOrders', () => {
     const none = makeOrder({ id: 1, option: '' });
     const plus = makeOrder({ id: 2, option: 'plus_piment' });
     const moins = makeOrder({ id: 3, option: 'moins_piment' });
-    // ordre alphabétique des libellés : '' < 'Moins de piment' < 'Plus de piment'
+    // ordre alphabétique des libellés : '' < 'Pas de piment' < 'Plus de piment'
     expect(sortOrders([plus, moins, none], { column: 'option', direction: 'asc' }).map((o) => o.id)).toEqual([1, 3, 2]);
   });
 

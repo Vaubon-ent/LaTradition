@@ -15,7 +15,7 @@ const PRODUCT_COLUMNS = [
 const OPTION_LABELS = {
   '': '',
   plus_piment: 'Plus de piment',
-  moins_piment: 'Moins de piment',
+  moins_piment: 'Pas de piment',
 };
 
 function optionLabel(option) {

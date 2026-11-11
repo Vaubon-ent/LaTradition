@@ -43,7 +43,7 @@ function sortProductsForDisplay(products) {
 const ORDER_OPTIONS = [
   { value: '', label: '' },
   { value: 'plus_piment', label: 'Plus de piment' },
-  { value: 'moins_piment', label: 'Moins de piment' },
+  { value: 'moins_piment', label: 'Pas de piment' },
 ];
 
 function escapeHtml(value) {
