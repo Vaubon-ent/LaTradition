@@ -222,6 +222,83 @@ section {
   border-color: var(--color-primary);
 }
 
+/* Vue portable (≤768px, même seuil que le responsive stepper/roulette côté
+   client) : même tableau, mêmes données, même JS (tri/filtres/mise à jour
+   Payé-Récupéré/Modifier inchangés) — seul l'affichage change. Les lignes
+   du corps du tableau deviennent des cartes empilées (chaque cellule garde
+   son libellé via data-label, posé en CSS généré) ; l'en-tête (tri +
+   filtres) passe en liste repliable pour ne plus écraser les cartes. */
+@media (max-width: 768px) {
+  #view-dashboard {
+    width: 100%;
+    padding: 12px;
+  }
+
+  .orders-table,
+  .orders-table tbody,
+  .orders-table tr {
+    display: block;
+    width: 100%;
+  }
+
+  .orders-table thead {
+    display: block;
+    margin-bottom: 12px;
+  }
+
+  .orders-table thead tr {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    border: none;
+  }
+
+  .orders-table thead th {
+    display: block;
+    flex: 1 1 130px;
+    border: none;
+    padding: 4px 0;
+  }
+
+  .orders-table tbody tr {
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    padding: 4px 12px;
+    margin-bottom: 12px;
+    background: #fff;
+  }
+
+  .orders-table tbody tr:nth-child(even) {
+    background: #fff;
+  }
+
+  .orders-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px dashed var(--color-border);
+    padding: 8px 0;
+    text-align: right;
+  }
+
+  .orders-table td:last-child {
+    border-bottom: none;
+  }
+
+  .orders-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: #6b5a44;
+    text-align: left;
+    flex-shrink: 0;
+  }
+
+  .orders-table td select {
+    width: auto;
+  }
+}
+
 .sort-btn {
   display: inline-flex;
   align-items: center;

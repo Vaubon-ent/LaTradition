@@ -180,14 +180,14 @@ function mount(root) {
         const pickedUp = Boolean(order.picked_up);
         return `
       <tr data-order-id="${order.id}">
-        <td>${order.last_name}</td>
-        <td>${order.first_name}</td>
-        <td>${order.phone}</td>
-        ${PRODUCT_COLUMNS.map((c) => `<td>${formatKg(kgForProduct(order, c.id))}</td>`).join('')}
-        <td>${formatEuros(order.total_cents)} €</td>
-        <td>${formatDate(order.created_at)}</td>
-        <td>${optionLabel(order.option)}</td>
-        <td>
+        <td data-label="Nom">${order.last_name}</td>
+        <td data-label="Prénom">${order.first_name}</td>
+        <td data-label="Tél.">${order.phone}</td>
+        ${PRODUCT_COLUMNS.map((c) => `<td data-label="${c.label} (kg)">${formatKg(kgForProduct(order, c.id))}</td>`).join('')}
+        <td data-label="Montant (€)">${formatEuros(order.total_cents)} €</td>
+        <td data-label="Date de commande">${formatDate(order.created_at)}</td>
+        <td data-label="Option">${optionLabel(order.option)}</td>
+        <td data-label="Payé">
           <select data-role="paid-select" data-order-id="${order.id}">
             <option value="non" ${order.paid_status === 'non' ? 'selected' : ''}>${PAID_STATUS_LABELS.non}</option>
             <option value="en_attente" ${order.paid_status === 'en_attente' ? 'selected' : ''}>${PAID_STATUS_LABELS.en_attente}</option>
@@ -195,14 +195,16 @@ function mount(root) {
           </select>
           <span class="row-error" data-role="paid-error" hidden></span>
         </td>
-        <td>
+        <td data-label="Récupéré">
           <select data-role="pickedup-select" data-order-id="${order.id}">
             <option value="non" ${!pickedUp ? 'selected' : ''}>Non</option>
             <option value="oui" ${pickedUp ? 'selected' : ''}>Oui</option>
           </select>
           <span class="row-error" data-role="pickedup-error" hidden></span>
         </td>
-        <td><button type="button" data-role="edit-order" data-order-id="${order.id}">Modifier</button></td>
+        <td>
+          <button type="button" data-role="edit-order" data-order-id="${order.id}">Modifier</button>
+        </td>
       </tr>
     `;
       })
